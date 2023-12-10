@@ -9,9 +9,9 @@ namespace espresso {
 template<typename T>
 class Numeric {
 public:
-    explicit Numeric(T val)
-    : value{val}
-    {}
+    Numeric() = default;
+
+    explicit Numeric(T val);
 
     ~Numeric() = default;
 
@@ -54,6 +54,18 @@ private:
 void Panic(const char* message);
 
 class ThrowException : public std::exception {
+public:
+    ThrowException(Integer stackIndex);
+    virtual ~ThrowException() = default;
+
+    ThrowException(const ThrowException&) = default;
+    ThrowException& operator=(const ThrowException&) = default;
+
+    ThrowException(ThrowException&&) = default;
+    ThrowException& operator=(ThrowException&&) = default;
+
+    const char* what() const noexcept override;
+    
 private:
     Integer stackIndex;
 };
@@ -69,7 +81,6 @@ public:
     CallFrame(CallFrame&&) = delete;
     CallFrame& operator=(CallFrame&&) = delete;
 
-    Integer StackTop() const;
 
     void Init(Integer stackBase);
 
@@ -77,6 +88,8 @@ public:
 
     Integer Size() const;
     void SetSize(Integer val);
+
+    Integer AbsoluteStackSize() const;
 
 private:
     Integer stackBase{0};
@@ -97,6 +110,8 @@ public:
     Vector& operator=(Vector&&) = delete;
 
     void Init(Runtime* rt);
+
+    void InitWithCapacity(Runtime* rt, Integer capacity);
 
     void DeInit(Runtime* rt);
 
@@ -224,7 +239,7 @@ public:
     Function(Function&&) = delete;
     Function& operator=(Function&&) = delete;
 
-    void Init(Object* next);
+    void Init(Runtime* rt, Object* next);
 
 private:
     Integer arity{0};
@@ -244,11 +259,10 @@ public:
     String(String&&) = delete;
     String& operator=(String&&) = delete;
 
-    void Init(Object* next, Integer length, char* data);
+    void Init(Runtime* rt, Object* next, Integer length, const char* data);
 
 private:
-    Integer length{0};
-    char* data{nullptr};
+    Vector<char> data;
 };
 
 class Runtime {

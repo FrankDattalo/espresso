@@ -4,9 +4,8 @@
 namespace espresso {
 
 Espresso::Espresso(System* system) {
-    void* dest = system->ReAllocate(nullptr, 0, sizeof(Runtime));
-    Runtime* rt = static_cast<Runtime*>(dest);
-    this->impl = new (rt) Runtime();
+    this->impl = system->ReAllocate(nullptr, 0, sizeof(Runtime));
+    Runtime* rt = static_cast<Runtime*>(this->impl);
     rt->Init(system);
 }
 

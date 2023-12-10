@@ -7,6 +7,11 @@ void Panic(const char* msg) {
     throw PanicException{msg};
 }
 
+template<typename T>
+Numeric<T>::Numeric(T val) {
+    this->value = val;
+}
+
 PanicException::PanicException(const char* msg) {
     this->message = msg;
 }
@@ -15,10 +20,19 @@ const char* PanicException::what() const noexcept {
     return this->message;
 }
 
+ThrowException::ThrowException(Integer stackIndex) {
+    this->stackIndex = stackIndex;
+}
+
+const char* ThrowException::what() const noexcept {
+    return "Espresso Exception";
+}
+
 void Runtime::Init(System* system) {
     this->system = system;
     this->stack.Init(this);
     this->frames.Init(this);
+    this->heap = nullptr;
     CallFrame* initialFrame = this->frames.Push(this);
     initialFrame->Init(Integer{0});
     // TODO: push entrypoint
@@ -36,7 +50,7 @@ System* Runtime::GetSystem() {
 
 void Runtime::Invoke(Integer argumentCount) {
     // -1 for function itself
-    Integer stackBase = Integer{Frame()->StackTop().Unwrap() - argumentCount.Unwrap() - 1};
+    Integer stackBase = Integer{Frame()->AbsoluteStackSize().Unwrap() - argumentCount.Unwrap() - 1};
     ValueType val = Frame()->At(this, stackBase)->GetType();
 
     if (!(val == ValueType::Function || val == ValueType::NativeFunction)) {
@@ -106,9 +120,18 @@ void* DefaultSystem::ReAllocate(
 
 template<typename T>
 void Vector<T>::Init(Runtime* rt) {
+    InitWithCapacity(rt, Integer{0});
+}
+
+template<typename T>
+void Vector<T>::InitWithCapacity(Runtime* rt, Integer capacity) {
     this->size = Integer{0};
-    this->capacity = Integer{16};
-    this->data = rt->New<T>(this->capacity);
+    this->capacity = capacity;
+    if (this->capacity.Unwrap() == 0) {
+        this->data = nullptr;
+    } else {
+        this->data = rt->New<T>(this->capacity);
+    }
 }
 
 template<typename T>
@@ -130,6 +153,9 @@ template<typename T>
 T* Vector<T>::Push(Runtime* rt) {
     if (this->size.Unwrap() == this->capacity.Unwrap()) {
         Integer newCapacity = Integer{this->capacity.Unwrap() * 2};
+        if (newCapacity.Unwrap() == 0) {
+            newCapacity = Integer{8};
+        }
         this->data = rt->ReAllocate<T>(this->data, this->capacity, newCapacity);
         this->capacity = newCapacity;
     }
@@ -156,7 +182,7 @@ void CallFrame::Init(Integer stackBase) {
     this->stackSize = Integer{0};
 }
 
-Integer CallFrame::StackTop() const {
+Integer CallFrame::AbsoluteStackSize() const {
     return Integer{this->stackBase.Unwrap() + this->stackSize.Unwrap()};
 }
 
@@ -198,18 +224,16 @@ NativeFunction Value::GetNativeFunction(Runtime* rt) const {
 }
 
 void Runtime::Throw() {
-    // TODO
-    Panic("RuntimeExceptionThrown");
+    Integer stackIndex = Integer{Frame()->AbsoluteStackSize().Unwrap() - 1};
+    throw ThrowException{stackIndex};
 }
 
 void Runtime::PushString(const char* message) {
     PushNil();
     // TODO: size converstion checking
     Integer length = Integer{static_cast<std::int64_t>(std::strlen(message))};
-    char* data = this->New<char>(Integer{length.Unwrap() + 1});
     String* str = this->New<String>(Integer{1});
-    str->Init(this->heap, length, data);
-    std::memcpy(data, message, length.Unwrap());
+    str->Init(this, this->heap, length, message);
     this->heap = str;
     Top()->SetString(str);
 }
@@ -242,10 +266,13 @@ void Runtime::PushNil() {
     Frame()->SetSize(Integer{1 + prevSize.Unwrap()});
 }
 
-void String::Init(Object* next, Integer length, char* data) {
+void String::Init(Runtime* rt, Object* next, Integer length, const char* data) {
     this->ObjectInit(ObjectType::String, next);
-    this->length = length;
-    this->data = data;
+    this->data.InitWithCapacity(rt, length);
+    std::int64_t n = length.Unwrap();
+    for (std::int64_t i = 0; i < n; i++) {
+        *this->data.At(Integer{i}) = data[i];
+    }
 }
 
 void Object::ObjectInit(ObjectType type, Object* next) {
@@ -256,7 +283,7 @@ void Object::ObjectInit(ObjectType type, Object* next) {
 void Runtime::PushFunction() {
     PushNil();
     Function* function = this->New<Function>(Integer{1});
-    function->Init(this->heap);
+    function->Init(this, this->heap);
     this->heap = function;
     Top()->SetFunction(function);
 }
@@ -266,10 +293,12 @@ void Value::SetFunction(Function* fn) {
     this->as.function = fn;
 }
 
-void Function::Init(Object* next) {
+void Function::Init(Runtime* rt, Object* next) {
     this->ObjectInit(ObjectType::Function, next);
+    this->arity = Integer{0};
+    this->localCount = Integer{0};
+    this->byteCode.Init(rt);
+    this->constants.Init(rt);
 }
-
-template class Vector<CallFrame>;
 
 }

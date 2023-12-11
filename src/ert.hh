@@ -278,11 +278,13 @@ public:
 
     void Init(Runtime* rt, Object* next);
 
-    ByteCode* ByteCodeAt(Integer index);
+    ByteCode* ByteCodeAt(Integer index) const;
 
-    Value* ConstantAt(Integer index);
+    Value* ConstantAt(Integer index) const;
 
-    void SetStack(Integer arity, Integer localCount);
+    void SetArity(Integer arity);
+
+    Integer GetArity() const;
 
     void ReserveByteCode(Runtime* rt, Integer capacity);
 
@@ -294,7 +296,6 @@ public:
 
 private:
     Integer arity{0};
-    Integer localCount{0};
     Vector<ByteCode> byteCode;
     Vector<Value> constants;
 };

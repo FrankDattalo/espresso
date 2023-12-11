@@ -40,7 +40,7 @@ def main():
     source = [ item for item in source if len(item) > 0 ]
 
     def new_context():
-        return {"arity": 0, "locals": 0, "opcodes": [], "constants": []}
+        return {"arity": 0, "opcodes": [], "constants": []}
 
     assembler = {
         "index": 0,
@@ -84,9 +84,6 @@ def main():
     def arity():
         assembler['contexts'][-1]['arity'] = int(assembler_next())
 
-    def locals():
-        assembler['contexts'][-1]['locals'] = int(assembler_next())
-
     def load_constant():
         constant_number = assembler_next_opcode_argument()
         emit((OP_LOAD_CONSTANT, constant_number))
@@ -125,7 +122,6 @@ def main():
 
     handlers = {
         'arity': arity,
-        'locals': locals,
         'loadConstant': load_constant,
         'loadGlobal': load_global,
         'invoke': invoke,
@@ -167,7 +163,6 @@ def main():
 
     def write_function(func):
         writeU16(func['arity'])
-        writeU16(func['locals'])
         writeU16(len(func['opcodes']))
         for ((op, _name), arg) in func['opcodes']:
             full = op | arg

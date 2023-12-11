@@ -1,7 +1,6 @@
 
 // function declaration
 arity 0
-locals 0
 
 // body
 loadConstant 1

@@ -116,8 +116,7 @@ struct BytecodeReader {
 
     void readFunction(Runtime* rt, Function* dest) {
         Integer arity = Integer{readU16(rt)};
-        Integer locals = Integer{readU16(rt)};
-        dest->SetStack(arity, locals);
+        dest->SetArity(arity);
         uint16_t byteCodeCount = readU16(rt);
         dest->ReserveByteCode(rt, Integer{byteCodeCount});
         for (uint16_t i = 0; i < byteCodeCount; i++) {

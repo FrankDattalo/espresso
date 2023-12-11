@@ -47,7 +47,6 @@ void Runtime::Init(System* system) {
     this->PushString("lib/entry.bc");
     this->ReadFile();
     this->LoadByteCode();
-
     // remove the temp nil
     this->Swap();
     this->Pop();
@@ -66,7 +65,6 @@ void Runtime::Init(System* system) {
         PushNativeFunction(native.fn);
         DefineGlobal();
     }
-
 }
 
 void Runtime::DeInit() {
@@ -93,6 +91,12 @@ void Runtime::Invoke(Integer argumentCount) {
     frame->Init(stackBase, argumentCount);
 
     if (val == ValueType::Function) {
+        Integer arity = Frame()->At(this, stackBase)->GetFunction(this)->GetArity();
+        if (argumentCount.Unwrap() != arity.Unwrap()) {
+            this->PushString("Invalid arity");
+            this->Throw();
+            return;
+        }
         this->Interpret();
 
     } else /* val == ValueType::NativeFunction */ {
@@ -435,7 +439,6 @@ void Runtime::PushMap() {
 void Function::Init(Runtime* rt, Object* next) {
     this->ObjectInit(ObjectType::Function, next);
     this->arity = Integer{0};
-    this->localCount = Integer{0};
     this->byteCode.Init(rt);
     this->constants.Init(rt);
 }
@@ -448,12 +451,16 @@ Integer ByteCode::Argument() const {
     return this->argument;
 }
 
-ByteCode* Function::ByteCodeAt(Integer index) {
+ByteCode* Function::ByteCodeAt(Integer index) const {
     return this->byteCode.At(index);
 }
 
-Value* Function::ConstantAt(Integer index) {
+Value* Function::ConstantAt(Integer index) const {
     return this->constants.At(index);
+}
+
+Integer Function::GetArity() const {
+    return this->arity;
 }
 
 void Value::Copy(Runtime* rt, Value* other) {
@@ -727,9 +734,8 @@ Value* Function::PushConstant(Runtime* rt) {
     return this->constants.Push(rt);
 }
 
-void Function::SetStack(Integer arity, Integer locals) {
+void Function::SetArity(Integer arity) {
     this->arity = arity;
-    this->localCount = locals;
 }
 
 void Runtime::Swap() {

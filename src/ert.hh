@@ -11,7 +11,7 @@ class Numeric {
 public:
     Numeric() = default;
 
-    explicit Numeric(T val);
+    explicit Numeric(T val) : value{val} {}
 
     ~Numeric() = default;
 
@@ -81,7 +81,6 @@ public:
     CallFrame(CallFrame&&) = delete;
     CallFrame& operator=(CallFrame&&) = delete;
 
-
     void Init(Integer stackBase);
 
     Value* At(Runtime* rt, Integer index);
@@ -90,6 +89,9 @@ public:
     void SetSize(Integer val);
 
     Integer AbsoluteStackSize() const;
+
+    Integer ProgramCounter() const;
+    void AdvanceProgramCounter();
 
 private:
     Integer stackBase{0};
@@ -116,11 +118,16 @@ public:
     void DeInit(Runtime* rt);
 
     T* Push(Runtime* rt);
+
     void Pop();
 
-    T* At(Integer index);
+    T* At(Integer index) const;
 
     Integer Length() const;
+
+    void Reserve(Runtime* rt, Integer cap);
+
+    const T* ConstHeadPointer() const;
 
 private:
     T* data{nullptr};
@@ -136,10 +143,16 @@ enum class ValueType {
     NativeFunction,
     String,
     Boolean,
+    Map,
 };
 
 enum class ByteCodeType {
     NoOp,
+    Return,
+    LoadConstant,
+    LoadGlobal,
+    Invoke,
+    Pop,
 };
 
 class ByteCode {
@@ -157,16 +170,26 @@ public:
 
     Integer Argument() const;
 
+    void Init(Runtime* rt, uint16_t value);
+
 private:
+    static constexpr uint16_t OP_BITS          = 0b1111100000000000;
+    static constexpr uint16_t OP_LOAD_CONSTANT = 0b0000000000000000;
+    static constexpr uint16_t OP_LOAD_GLOBAL   = 0b0000100000000000;
+    static constexpr uint16_t OP_INVOKE        = 0b0001000000000000;
+    static constexpr uint16_t OP_POP           = 0b0001100000000000;
+    static constexpr uint16_t OP_RETURN        = 0b0010000000000000;
+    static constexpr uint16_t VALUE_BITS       = 0b0000011111111111;
+
     ByteCodeType type;
     Integer argument{0};
 };
-
 
 typedef void (*NativeFunction)(Runtime* rt);
 
 class Function;
 class String;
+class Map;
 
 class Value {
 public:
@@ -185,13 +208,23 @@ public:
     void SetFunction(Function* value);
     void SetString(String* value);
     void SetNativeFunction(NativeFunction value);
+    void SetBoolean(bool value);
+    void SetMap(Map* val);
+
+    bool Equals(Runtime* rt, Value* other) const;
 
     ValueType GetType() const;
+    void AssertType(Runtime* rt, ValueType type) const;
     Integer GetInteger(Runtime* rt) const;
     Double GetDouble(Runtime* rt) const;
     Function* GetFunction(Runtime* rt) const;
     String* GetString(Runtime* rt) const;
     NativeFunction GetNativeFunction(Runtime* rt) const;
+    bool GetBoolean(Runtime* rt) const;
+    Map* GetMap(Runtime* rt) const;
+
+    void Copy(Runtime* rt, Value* other);
+
 private:
     ValueType type{ValueType::Nil};
     union {
@@ -200,12 +233,14 @@ private:
         Function* function;
         String* string;
         NativeFunction native;
+        Map* map;
     } as{Integer{0}};
 };
 
 enum class ObjectType {
     String,
     Function,
+    Map,
 };
 
 class Object {
@@ -241,6 +276,20 @@ public:
 
     void Init(Runtime* rt, Object* next);
 
+    ByteCode* ByteCodeAt(Integer index);
+
+    Value* ConstantAt(Integer index);
+
+    void SetStack(Integer arity, Integer localCount);
+
+    void ReserveByteCode(Runtime* rt, Integer capacity);
+
+    void ReserveConstants(Runtime* rt, Integer capacity);
+
+    ByteCode* PushByteCode(Runtime* rt);
+
+    Value* PushConstant(Runtime* rt);
+
 private:
     Integer arity{0};
     Integer localCount{0};
@@ -261,8 +310,47 @@ public:
 
     void Init(Runtime* rt, Object* next, Integer length, const char* data);
 
+    bool Equals(String* other) const;
+
+    Integer Length() const;
+
+    char At(Integer index) const;
+
+    void Push(Runtime* rt, char c);
+
+    void Reserve(Runtime* rt, Integer val);
+
+    const char* CString(Runtime* rt);
+
 private:
     Vector<char> data;
+};
+
+class Map : public Object {
+public:
+    Map() = default;
+    ~Map() = default;
+
+    Map(const Map&) = delete;
+    Map& operator=(const Map&) = delete;
+
+    Map(Map&&) = delete;
+    Map& operator=(Map&&) = delete;
+
+    void Init(Runtime* rt, Object* next);
+
+    Value* Get(Runtime* rt, Value* key);
+
+    void Put(Runtime* rt, Value* key, Value* value);
+
+private:
+    class Entry {
+    friend class Map;
+        Value key;
+        Value value;
+    };
+
+    Vector<Entry> entries;
 };
 
 class Runtime {
@@ -303,6 +391,18 @@ public:
 
     void PushFunction();
 
+    void PushMap();
+
+    void PushValue(Value* val);
+
+    void LoadGlobal();
+
+    void ReadFile();
+
+    void LoadByteCode();
+
+    void Swap();
+
     template<typename T>
     T* New(Integer length);
 
@@ -316,6 +416,7 @@ private:
     System* system{nullptr};
     Vector<CallFrame> frames;
     Vector<Value> stack;
+    Map* globals{nullptr};
     Object* heap{nullptr};
 };
 

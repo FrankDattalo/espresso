@@ -14,6 +14,7 @@ set(CMAKE_VERBOSE_MAKEFILE on)
 set(COMMON
     src/espresso.cc
     src/ert.cc
+    src/ebc.cc
 )
 
 add_executable(espresso ${COMMON} "src/main.cc")

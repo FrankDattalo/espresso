@@ -3,4 +3,5 @@
 #include <cstdint>
 #include <cstddef>
 #include <cstring>
+#include <cstdio>
 #include <stdexcept>

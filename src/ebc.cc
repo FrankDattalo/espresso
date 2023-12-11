@@ -82,10 +82,12 @@ struct BytecodeReader {
                 String* str = rt->Top()->GetString(rt);
                 dest->SetString(str);
                 uint32_t length = readU32(rt);
-                str->Reserve(rt, Integer{length});
+                str->Reserve(rt, Integer{length + 1});
+                str->Clear();
                 for (uint32_t i = 0; i < length; i++) {
                     str->Push(rt, static_cast<char>(readU8(rt)));
                 }
+                str->Push(rt, '\0');
                 rt->Pop();
                 break;
             }

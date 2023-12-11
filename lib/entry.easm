@@ -13,6 +13,6 @@ loadConstant 2
 return
 
 // constants
-integer 42
-string print
+string "Hello, World!"
+string "print"
 nil

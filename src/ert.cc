@@ -31,8 +31,12 @@ void Runtime::Init(System* system) {
     this->stack.Init(this);
     this->frames.Init(this);
 
+    // setup empty value so that 
+    // call frames are in proper state
+    this->stack.Push(this)->SetNil();
+
     CallFrame* initialFrame = this->frames.Push(this);
-    initialFrame->Init(Integer{0});
+    initialFrame->Init(Integer{0}, Integer{0});
 
     this->PushMap();
     this->globals = Top()->GetMap(this);
@@ -43,6 +47,26 @@ void Runtime::Init(System* system) {
     this->PushString("lib/entry.bc");
     this->ReadFile();
     this->LoadByteCode();
+
+    // remove the temp nil
+    this->Swap();
+    this->Pop();
+
+    struct NativeEntry {
+        const char* name;
+        NativeFunction fn;
+    };
+
+    constexpr static NativeEntry NATIVES[] = {
+        { "print", Runtime::DoPrint },
+    };
+
+    for (const auto& native: NATIVES) {
+        PushString(native.name);
+        PushNativeFunction(native.fn);
+        DefineGlobal();
+    }
+
 }
 
 void Runtime::DeInit() {
@@ -66,7 +90,7 @@ void Runtime::Invoke(Integer argumentCount) {
     }
 
     CallFrame* frame = frames.Push(this);
-    frame->Init(stackBase);
+    frame->Init(stackBase, argumentCount);
 
     if (val == ValueType::Function) {
         this->Interpret();
@@ -75,6 +99,17 @@ void Runtime::Invoke(Integer argumentCount) {
         NativeFunction fn = frame->At(this, Integer{0})->GetNativeFunction(this);
         fn(this);
     }
+
+    // return logic of transfering stack result to the right spot
+    Integer resultFrameIndex = Integer{this->frames.Length().Unwrap() - 2};
+    CallFrame* resultFrame = this->frames.At(resultFrameIndex);
+    Integer currentResultFrameSize = resultFrame->Size();
+    // -1 for function itself should be here, but this is negated by the push of the result
+    Integer newResultFrameSize = Integer{currentResultFrameSize.Unwrap() - argumentCount.Unwrap()};
+    resultFrame->SetSize(newResultFrameSize);
+    resultFrame->At(this, Integer{newResultFrameSize.Unwrap() - 1})->Copy(this, Top());
+    this->frames.Pop();
+    this->stack.Truncate(resultFrame->AbsoluteStackSize());
 }
 
 template<typename T>
@@ -129,8 +164,20 @@ FILE* DefaultSystem::Open(const char* name, const char* mode) {
     return std::fopen(name, mode);
 }
 
+FILE* DefaultSystem::Stdout() {
+    return stdout;
+}
+
+FILE* DefaultSystem::Stdin() {
+    return stdin;
+}
+
 int DefaultSystem::Read(FILE* fp) {
     return std::fgetc(fp);
+}
+
+void DefaultSystem::Write(FILE* fp, const char* message, size_t size) {
+    std::fwrite(message, sizeof(char), size, fp);
 }
 
 void DefaultSystem::Close(FILE* fp) {
@@ -202,12 +249,21 @@ void Vector<T>::Pop() {
 }
 
 template<typename T>
+void Vector<T>::Truncate(Integer newSize) {
+    if (this->size.Unwrap() < newSize.Unwrap()) {
+        Panic("Truncate Underflow");
+        return;
+    }
+    this->size = newSize;
+}
+
+template<typename T>
 Integer Vector<T>::Length() const {
     return this->size;
 }
 
 template<typename T>
-const T* Vector<T>::ConstHeadPointer() const {
+const T* Vector<T>::RawHeadPointer() const {
     return this->data;
 }
 
@@ -217,11 +273,11 @@ CallFrame* Runtime::Frame() {
     return frames.At(last);
 }
 
-void CallFrame::Init(Integer stackBase) {
+void CallFrame::Init(Integer stackBase, Integer argumentCount) {
     this->stackBase = stackBase;
     this->programCounter = Integer{0};
     // 1 for the function itself
-    this->stackSize = Integer{0};
+    this->stackSize = Integer{1 + argumentCount.Unwrap()};
 }
 
 Integer CallFrame::AbsoluteStackSize() const {
@@ -263,13 +319,6 @@ void Runtime::Interpret() {
                 break;
             }
             case ByteCodeType::Return: {
-                Frame()->AdvanceProgramCounter();
-                Integer resultFrameIndex = Integer{this->frames.Length().Unwrap() - 2};
-                CallFrame* resultFrame = this->frames.At(resultFrameIndex);
-                Integer currentResultFrameSize = resultFrame->Size();
-                resultFrame->At(this, currentResultFrameSize)->Copy(this, Top());
-                resultFrame->SetSize(Integer{currentResultFrameSize.Unwrap() + 1});
-                this->frames.Pop();
                 return;
             }
             default: {
@@ -304,6 +353,20 @@ void Runtime::Throw() {
     throw ThrowException{stackIndex};
 }
 
+void Runtime::PushNativeFunction(NativeFunction fn) {
+    PushNil();
+    Top()->SetNativeFunction(fn);
+}
+
+void Runtime::DefineGlobal() {
+    CallFrame* frame = Frame();
+    Integer value = Integer{frame->Size().Unwrap() - 1};
+    Integer key = Integer{frame->Size().Unwrap() - 2};
+    globals->Put(this, frame->At(this, key), frame->At(this, value));
+    Pop();
+    Pop();
+}
+
 void Runtime::PushString(const char* message) {
     PushNil();
     // TODO: size converstion checking
@@ -332,9 +395,10 @@ void CallFrame::SetSize(Integer value) {
 }
 
 void Runtime::PushNil() {
+    CallFrame* frame = Frame();
+    Integer prevSize = frame->Size();
     this->stack.Push(this)->SetNil();
-    Integer prevSize = Frame()->Size();
-    Frame()->SetSize(Integer{1 + prevSize.Unwrap()});
+    frame->SetSize(Integer{1 + prevSize.Unwrap()});
 }
 
 void String::Init(Runtime* rt, Object* next, Integer length, const char* data) {
@@ -344,6 +408,7 @@ void String::Init(Runtime* rt, Object* next, Integer length, const char* data) {
     for (std::int64_t i = 0; i < n; i++) {
         *this->data.Push(rt) = data[i];
     }
+    *this->data.Push(rt) = '\0';
 }
 
 void Object::ObjectInit(ObjectType type, Object* next) {
@@ -519,8 +584,10 @@ Integer CallFrame::ProgramCounter() const {
 }
 
 void Runtime::Pop() {
-    Integer currentSize = Frame()->Size();
-    Frame()->SetSize(Integer{currentSize.Unwrap() - 1});
+    CallFrame* frame = Frame();
+    Integer currentSize = frame->Size();
+    frame->SetSize(Integer{currentSize.Unwrap() - 1});
+    this->stack.Truncate(frame->AbsoluteStackSize());
 }
 
 void Runtime::PushValue(Value* other) {
@@ -549,6 +616,23 @@ Value* Map::Get(Runtime* rt, Value* key) {
         }
     }
     return nullptr;
+}
+
+void Map::Put(Runtime* rt, Value* key, Value* value) {
+    Entry* existing = nullptr;
+    std::int64_t n = this->entries.Length().Unwrap();
+    for (std::int64_t index = 0; index < n; index++) {
+        Entry* entry = this->entries.At(Integer{index});
+        if (entry->key.Equals(rt, key)) {
+            existing = entry;
+            break;
+        }
+    }
+    if (existing == nullptr) {
+        existing = this->entries.Push(rt);
+    }
+    existing->key.Copy(rt, key);
+    existing->value.Copy(rt, value);
 }
 
 void Map::Init(Runtime* rt, Object* next) {
@@ -609,6 +693,10 @@ bool String::Equals(String* other) const {
 
 void String::Push(Runtime* rt, char c) {
     *this->data.Push(rt) = c;
+}
+
+void String::Clear() {
+    this->data.Truncate(Integer{0});
 }
 
 Integer String::Length() const {
@@ -693,18 +781,9 @@ void ByteCode::Init(Runtime* rt, uint16_t val) {
     }
 }
 
-const char* String::CString(Runtime* rt) {
-    Integer length = this->data.Length();
-    char last = *this->data.At(Integer{length.Unwrap() - 1});
-    if (last != '\0') {
-        *this->data.Push(rt) = '\0';
-    }
-    return this->data.ConstHeadPointer();
-}
-
 void Runtime::ReadFile() {
     String* fileName = Top()->GetString(this);
-    const char* fileNameCString = fileName->CString(this);
+    const char* fileNameCString = fileName->RawPointer();
     FILE* fp = system->Open(fileNameCString, "rb");
     if (fp == nullptr) {
         PushString("Could not open file");
@@ -714,12 +793,25 @@ void Runtime::ReadFile() {
     PushString("");
     String* dest = Top()->GetString(this);
     int c = EOF;
+    dest->Clear();
     while ((c = system->Read(fp)) != EOF) {
         dest->Push(this, static_cast<char>(c));
     }
     system->Close(fp);
+    dest->Push(this, '\0');
     Swap();
     Pop();
+}
+
+const char* String::RawPointer() const {
+    return this->data.RawHeadPointer();
+}
+
+void Runtime::DoPrint(Runtime* rt) {
+    String* str = rt->Top()->GetString(rt);
+    rt->system->Write(rt->system->Stdout(), str->RawPointer(), str->Length().Unwrap());
+    rt->system->Write(rt->system->Stdout(), "\n", 1);
+    rt->PushNil();
 }
 
 }

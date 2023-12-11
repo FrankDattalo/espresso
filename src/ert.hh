@@ -81,7 +81,7 @@ public:
     CallFrame(CallFrame&&) = delete;
     CallFrame& operator=(CallFrame&&) = delete;
 
-    void Init(Integer stackBase);
+    void Init(Integer stackBase, Integer argumentCount);
 
     Value* At(Runtime* rt, Integer index);
 
@@ -127,7 +127,9 @@ public:
 
     void Reserve(Runtime* rt, Integer cap);
 
-    const T* ConstHeadPointer() const;
+    const T* RawHeadPointer() const;
+
+    void Truncate(Integer newLength);
 
 private:
     T* data{nullptr};
@@ -320,7 +322,9 @@ public:
 
     void Reserve(Runtime* rt, Integer val);
 
-    const char* CString(Runtime* rt);
+    const char* RawPointer() const;
+
+    void Clear();
 
 private:
     Vector<char> data;
@@ -403,6 +407,10 @@ public:
 
     void Swap();
 
+    void PushNativeFunction(NativeFunction fn);
+
+    void DefineGlobal();
+
     template<typename T>
     T* New(Integer length);
 
@@ -411,8 +419,11 @@ public:
 
     template<typename T>
     void Free(T* ptr, Integer length);
+    
+    static void DoPrint(Runtime* rt);
 
 private:
+
     System* system{nullptr};
     Vector<CallFrame> frames;
     Vector<Value> stack;

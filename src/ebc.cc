@@ -144,7 +144,7 @@ void Runtime::LoadByteCode() {
     this->Swap();
 
     // bytecode string, function
-    BytecodeReader reader{string, string->Length()};
+    BytecodeReader reader{string, Integer{0}};
 
     Function* dest = this->Top()->GetFunction(this);
 

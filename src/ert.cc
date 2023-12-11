@@ -339,7 +339,7 @@ void Runtime::PushNil() {
 
 void String::Init(Runtime* rt, Object* next, Integer length, const char* data) {
     this->ObjectInit(ObjectType::String, next);
-    this->data.InitWithCapacity(rt, length);
+    this->data.InitWithCapacity(rt, Integer{1 + length.Unwrap()});
     std::int64_t n = length.Unwrap();
     for (std::int64_t i = 0; i < n; i++) {
         *this->data.Push(rt) = data[i];

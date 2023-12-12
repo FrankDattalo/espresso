@@ -186,6 +186,7 @@ enum class ByteCodeType {
     Invoke = bits::OP_INVOKE,
     Copy = bits::OP_COPY,
     Equal = bits::OP_EQUAL,
+    Add = bits::OP_ADD,
     Subtract = bits::OP_SUB,
     Multiply = bits::OP_MULT,
     JumpIfFalse = bits::OP_JUMPF,
@@ -475,7 +476,9 @@ public:
     void Return(Integer sourceIndex);
 
     void Multiply(Integer dest, Integer arg1, Integer arg2);
+    void Divide(Integer dest, Integer arg1, Integer arg2);
     
+    void Add(Integer dest, Integer arg1, Integer arg2);
     void Subtract(Integer dest, Integer arg1, Integer arg2);
 
     void Equal(Integer dest, Integer arg1, Integer arg2);

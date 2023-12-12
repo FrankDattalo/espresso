@@ -54,7 +54,7 @@ struct BytecodeReader {
     double readF64(Runtime* rt) {
         uint64_t bytes = readU64(rt);
         double* ptr = (double*) &bytes;
-        int64_t result = *ptr;
+        double result = *ptr;
         return result;
     }
 

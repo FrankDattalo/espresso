@@ -74,25 +74,10 @@ void Runtime::Invoke(Integer localBase, Integer argumentCount) {
         ? Local(localBase)->GetFunction(this)->GetArity()
         : Local(localBase)->GetNativeFunction(this)->GetArity();
 
-    if (localCount.Unwrap() <= 0) {
-        Panic("Invalid local count");
-        return;
-    }
-
-    if (argumentCount.Unwrap() <= 0) {
-        Panic("Invalid argument count");
-        return;
-    }
-
     // Too Many / Too Few args passed
     if (arity.Unwrap() != argumentCount.Unwrap()) {
         Local(Integer{0})->SetString(NewString("Invalid arity"));
         Throw(Integer{0});
-        return;
-    }
-
-    if (argumentCount.Unwrap() > localCount.Unwrap()) {
-        Panic("Invalid argument count");
         return;
     }
 
@@ -390,6 +375,14 @@ void Runtime::Interpret() {
                 this->Subtract(arg1, arg2, arg3);
                 break;
             }
+            case ByteCodeType::Add: {
+                CurrentFrame()->AdvanceProgramCounter();
+                Integer arg1 = byteCode->SmallArgument1();
+                Integer arg2 = byteCode->SmallArgument2();
+                Integer arg3 = byteCode->SmallArgument3();
+                this->Add(arg1, arg2, arg3);
+                break;
+            }
             case ByteCodeType::Multiply: {
                 CurrentFrame()->AdvanceProgramCounter();
                 Integer arg1 = byteCode->SmallArgument1();
@@ -443,22 +436,82 @@ void Runtime::Equal(Integer dest, Integer arg1, Integer arg2) {
     Local(dest)->SetBoolean(Local(arg1)->Equals(this, Local(arg2)));
 }
 
-void Runtime::Subtract(Integer dest, Integer arg1, Integer arg2) {
-    // TODO: rest of the types
-    Local(dest)->SetInteger(
-        Integer{
-            Local(arg1)->GetInteger(this).Unwrap() - Local(arg2)->GetInteger(this).Unwrap()
+void Runtime::Add(Integer dest, Integer arg1, Integer arg2) {
+    switch (Local(arg1)->GetType()) {
+        case ValueType::Integer: {
+            Local(dest)->SetInteger(
+                Integer{
+                    Local(arg1)->GetInteger(this).Unwrap() + Local(arg2)->GetInteger(this).Unwrap()
+                }
+            );
+            break;
         }
-    );
+        case ValueType::Double: {
+            Local(dest)->SetDouble(
+                Double{
+                    Local(arg1)->GetDouble(this).Unwrap() + Local(arg2)->GetDouble(this).Unwrap()
+                }
+            );
+            break;
+        }
+        default: {
+            this->Local(Integer{0})->SetString(this->NewString("Expected an integer or real for math operation"));
+            this->Throw(Integer{0});
+            break;
+        }
+    }
+}
+
+void Runtime::Subtract(Integer dest, Integer arg1, Integer arg2) {
+    switch (Local(arg1)->GetType()) {
+        case ValueType::Integer: {
+            Local(dest)->SetInteger(
+                Integer{
+                    Local(arg1)->GetInteger(this).Unwrap() - Local(arg2)->GetInteger(this).Unwrap()
+                }
+            );
+            break;
+        }
+        case ValueType::Double: {
+            Local(dest)->SetDouble(
+                Double{
+                    Local(arg1)->GetDouble(this).Unwrap() - Local(arg2)->GetDouble(this).Unwrap()
+                }
+            );
+            break;
+        }
+        default: {
+            this->Local(Integer{0})->SetString(this->NewString("Expected an integer or real for math operation"));
+            this->Throw(Integer{0});
+            break;
+        }
+    }
 }
 
 void Runtime::Multiply(Integer dest, Integer arg1, Integer arg2) {
-    // TODO: rest of the types
-    Local(dest)->SetInteger(
-        Integer{
-            Local(arg1)->GetInteger(this).Unwrap() * Local(arg2)->GetInteger(this).Unwrap()
+    switch (Local(arg1)->GetType()) {
+        case ValueType::Integer: {
+            Local(dest)->SetInteger(
+                Integer{
+                    Local(arg1)->GetInteger(this).Unwrap() * Local(arg2)->GetInteger(this).Unwrap()
+                }
+            );
+            break;
         }
-    );
+        case ValueType::Double: {
+            Local(dest)->SetDouble(
+                Double{
+                    Local(arg1)->GetDouble(this).Unwrap() * Local(arg2)->GetDouble(this).Unwrap()
+                }
+            );
+            break;
+        }
+        default: {
+            this->Local(Integer{0})->SetString(this->NewString("Expected an integer or real for math operation"));
+            this->Throw(Integer{0});
+            break;
+        }
+    }
 }
 
 ValueType Value::GetType() const {
@@ -642,7 +695,7 @@ void Value::Copy(Runtime* rt, Value* other) {
             break;
         }
         default: {
-            Panic("Unhandled ValueType");
+            Panic("Unhandled ValueType in Copy");
             return;
         }
     }
@@ -819,7 +872,7 @@ bool Value::Equals(Runtime* rt, Value* other) const {
             return this->GetMap(rt) == other->GetMap(rt);
         }
         default: {
-            Panic("Unhandled ValueType");
+            Panic("Unhandled ValueType in Equals");
             return false;
         }
     }
@@ -1007,6 +1060,12 @@ void ByteCode::Verify(Runtime* rt, const Function* fn) const {
             validateRegisterIsWritable(this->SmallArgument1(), "Invalid writable register for Equal");
             validateRegisterIsReadable(this->SmallArgument2(), "Invalid readable register 1 for Equal");
             validateRegisterIsReadable(this->SmallArgument3(), "Invalid readable register 2 for Equal");
+            break;
+        }
+        case ByteCodeType::Add: {
+            validateRegisterIsWritable(this->SmallArgument1(), "Invalid writable register for Add");
+            validateRegisterIsReadable(this->SmallArgument2(), "Invalid readable register 1 for Add");
+            validateRegisterIsReadable(this->SmallArgument3(), "Invalid readable register 2 for Add");
             break;
         }
         case ByteCodeType::Subtract: {

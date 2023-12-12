@@ -18,4 +18,11 @@ test: build
 run:
 	./build/espresso
 
-.PHONY: test clean prepare build flex sourceStats
+asm:
+	python3 ./asm/assembler.py < ./lib/helloworld.easm > ./lib/helloworld.bc
+	python3 ./asm/assembler.py < ./lib/factorial.easm > ./lib/factorial.bc
+	python3 ./asm/assembler.py < ./lib/invalid.easm > ./lib/invalid.bc
+	python3 ./asm/assembler.py < ./lib/try.easm > ./lib/try.bc
+	python3 ./asm/assembler.py < ./lib/doublemath.easm > ./lib/doublemath.bc
+
+.PHONY: test clean prepare build flex sourceStats asm

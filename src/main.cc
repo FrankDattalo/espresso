@@ -10,6 +10,5 @@ int main(int argc, char** argv) {
 
     espresso::DefaultSystem system;
     espresso::Espresso espresso{&system};
-    espresso.Load(fileName);
-    return 0;
+    return espresso.Load(fileName);
 }

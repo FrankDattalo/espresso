@@ -89,6 +89,13 @@ def main():
     def writeI64(v):
         assembler['output'] += int.to_bytes(v, byteorder='big', signed=True, length=8)
 
+    def writeF64(v):
+        import struct
+        data = struct.pack('>d', v)
+        data = [ b for b in data ]
+        data = int.from_bytes(bytearray(data), byteorder='big', signed=False)
+        writeU64(data)
+
     def next():
         curr = assembler['source'][assembler['index']]
         assembler['index'] += 1
@@ -181,6 +188,10 @@ def main():
         val = next_int()
         constant((CONST_INT, val))
 
+    def op_float():
+        val = float(next())
+        constant((CONST_REAL, val))
+
     def function():
         assembler['contexts'].append(new_context())
         assembler['contexts'][-2]['constants'].append((CONST_FUNC, assembler['contexts'][-1]))
@@ -219,6 +230,12 @@ def main():
         source2 = next_register()
         emit(OP_SUB   | Arg1(dest) | Arg2(source1) | Arg3(source2))
 
+    def add():
+        dest = next_register()
+        source1 = next_register()
+        source2 = next_register()
+        emit(OP_ADD   | Arg1(dest) | Arg2(source1) | Arg3(source2))
+
     def mult():
         dest = next_register()
         source1 = next_register()
@@ -242,7 +259,9 @@ def main():
         'jumpf': jump_if_false,
         'label': label,
         'sub': sub,
+        'add': add,
         'mult': mult,
+        'float': op_float,
     }
 
     while assembler['index'] < len(assembler['source']):
@@ -261,11 +280,14 @@ def main():
             pass
         def write_int(v):
             writeI64(v)
+        def write_float(v):
+            writeF64(v)
         handlers = {
             CONST_STRING: write_string,
             CONST_FUNC: write_function,
             CONST_NIL: write_nil,
             CONST_INT: write_int,
+            CONST_REAL: write_float,
         }
         const_type, val = const
         writeU8(const_type[0])

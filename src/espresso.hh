@@ -16,7 +16,7 @@ public:
     Espresso(Espresso&&) = delete;
     Espresso& operator=(Espresso&&) = delete;
 
-    void Load(const char* name);
+    int Load(const char* name);
 
 private:
     void* impl;

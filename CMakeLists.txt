@@ -15,6 +15,7 @@ set(COMMON
     src/espresso.cc
     src/ert.cc
     src/ebc.cc
+    src/enat.cc
 )
 
 add_executable(espresso ${COMMON} "src/main.cc")

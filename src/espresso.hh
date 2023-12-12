@@ -16,7 +16,7 @@ public:
     Espresso(Espresso&&) = delete;
     Espresso& operator=(Espresso&&) = delete;
 
-    void Invoke(std::int64_t argumentCount);
+    void Invoke(std::int64_t base, std::int64_t argumentCount);
 
 private:
     void* impl;

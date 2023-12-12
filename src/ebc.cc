@@ -2,19 +2,21 @@
 
 namespace espresso {
 
+namespace bytecode {
+
 struct BytecodeReader {
 
     String* source;
-    Integer index;
+    std::int64_t index;
 
     uint8_t readU8(Runtime* rt) {
-        if (index.Unwrap() >= source->Length().Unwrap()) {
-            rt->PushString("File truncated");
-            rt->Throw();
+        if (index >= source->Length().Unwrap()) {
+            rt->Local(Integer{0})->SetString(rt->NewString("File truncated"));
+            rt->Throw(Integer{0});
             return 0;
         }
-        uint8_t result = static_cast<uint8_t>(source->At(index));
-        this->index = Integer{index.Unwrap() + 1};
+        uint8_t result = static_cast<uint8_t>(source->At(Integer{index}));
+        this->index++;
         return result;
     }
 
@@ -78,8 +80,8 @@ struct BytecodeReader {
             }
             // string
             case 3: {
-                rt->PushString("");
-                String* str = rt->Top()->GetString(rt);
+                rt->Local(Integer{2})->SetString(rt->NewString(""));
+                String* str = rt->Local(Integer{2})->GetString(rt);
                 dest->SetString(str);
                 uint32_t length = readU32(rt);
                 str->Reserve(rt, Integer{length + 1});
@@ -88,7 +90,6 @@ struct BytecodeReader {
                     str->Push(rt, static_cast<char>(readU8(rt)));
                 }
                 str->Push(rt, '\0');
-                rt->Pop();
                 break;
             }
             // boolean
@@ -99,16 +100,15 @@ struct BytecodeReader {
             }
             // function
             case 5: {
-                rt->PushFunction();
-                Function* fn = rt->Top()->GetFunction(rt);
+                rt->Local(Integer{2})->SetFunction(rt->NewFunction());
+                Function* fn = rt->Local(Integer{2})->GetFunction(rt);
                 dest->SetFunction(fn);
                 readFunction(rt, fn);
-                rt->Pop();
                 break;
             }
             default: {
-                rt->PushString("Invalid constant");
-                rt->Throw();
+                rt->Local(Integer{0})->SetString(rt->NewString("Invalid constant"));
+                rt->Throw(Integer{0});
                 break;
             }
         }
@@ -116,12 +116,13 @@ struct BytecodeReader {
 
     void readFunction(Runtime* rt, Function* dest) {
         Integer arity = Integer{readU16(rt)};
-        dest->SetArity(arity);
+        Integer localCount = Integer{readU16(rt)};
+        dest->SetStack(arity, localCount);
         uint16_t byteCodeCount = readU16(rt);
         dest->ReserveByteCode(rt, Integer{byteCodeCount});
         for (uint16_t i = 0; i < byteCodeCount; i++) {
             ByteCode* bc = dest->PushByteCode(rt);
-            bc->Init(rt, readU16(rt));
+            bc->Init(rt, readU32(rt));
         }
         uint16_t constantCount = readU16(rt);
         dest->ReserveConstants(rt, Integer{constantCount});
@@ -133,27 +134,17 @@ struct BytecodeReader {
 
 };
 
-void Runtime::LoadByteCode() {
-    // bytecode string -> zero arity function
+void Load(Runtime* rt) {
+    rt->Local(Integer{0})->SetFunction(rt->NewFunction());
 
-    this->PushFunction();
-    this->Swap();
+    Function* dest = rt->Local(Integer{0})->GetFunction(rt);
+    String* string = rt->Local(Integer{1})->GetString(rt);
 
-    // function, bytecode string
+    BytecodeReader reader{string, 0};
 
-    String* string = this->Top()->GetString(this);
-    this->Swap();
-
-    // bytecode string, function
-    BytecodeReader reader{string, Integer{0}};
-
-    Function* dest = this->Top()->GetFunction(this);
-
-    reader.readFunction(this, dest);
-
-    this->Swap();
-    this->Pop();
-
+    reader.readFunction(rt, dest);
 }
 
-}
+} // bytecode
+
+} // espresso

@@ -16,9 +16,9 @@ Espresso::~Espresso() {
     system->ReAllocate(rt, sizeof(Runtime), 0);
 }
 
-void Espresso::Invoke(std::int64_t argumentCount) {
+void Espresso::Invoke(std::int64_t base, std::int64_t argumentCount) {
     Runtime* rt = static_cast<Runtime*>(this->impl);
-    rt->Invoke(Integer{argumentCount});
+    rt->Invoke(Integer{base}, Integer{argumentCount});
 }
 
 }

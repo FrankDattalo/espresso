@@ -85,10 +85,7 @@ public:
 
     Value* At(Runtime* rt, Integer index);
 
-    Integer Size() const;
-    void SetSize(Integer val);
-
-    Integer AbsoluteStackSize() const;
+    Integer AbsoluteIndex(Integer localNumber) const;
 
     Integer ProgramCounter() const;
     void AdvanceProgramCounter();
@@ -154,7 +151,6 @@ enum class ByteCodeType {
     LoadConstant,
     LoadGlobal,
     Invoke,
-    Pop,
 };
 
 class ByteCode {
@@ -170,25 +166,29 @@ public:
 
     ByteCodeType Type() const;
 
-    Integer Argument() const;
+    Integer Argument1() const;
+    Integer Argument2() const;
 
-    void Init(Runtime* rt, uint16_t value);
+    void Init(Runtime* rt, uint32_t value);
 
 private:
-    static constexpr uint16_t OP_BITS          = 0b1111100000000000;
-    static constexpr uint16_t OP_LOAD_CONSTANT = 0b0000000000000000;
-    static constexpr uint16_t OP_LOAD_GLOBAL   = 0b0000100000000000;
-    static constexpr uint16_t OP_INVOKE        = 0b0001000000000000;
-    static constexpr uint16_t OP_POP           = 0b0001100000000000;
-    static constexpr uint16_t OP_RETURN        = 0b0010000000000000;
-    static constexpr uint16_t VALUE_BITS       = 0b0000011111111111;
 
-    ByteCodeType type;
-    Integer argument{0};
+    static constexpr uint32_t ARG_BITS_COUNT   = 12;
+    static constexpr uint32_t OP_BITS          = 0b11111111000000000000000000000000;
+    static constexpr uint32_t ARG1_BITS        = 0b00000000111111111111000000000000;
+    static constexpr uint32_t ARG2_BITS        = 0b00000000000000000000111111111111;
+    static constexpr uint32_t OP_LOAD_CONSTANT = 0b00000001000000000000000000000000;
+    static constexpr uint32_t OP_LOAD_GLOBAL   = 0b00000010000000000000000000000000;
+    static constexpr uint32_t OP_INVOKE        = 0b00000011000000000000000000000000;
+    static constexpr uint32_t OP_RETURN        = 0b00000100000000000000000000000000;
+
+    ByteCodeType type{ByteCodeType::NoOp};
+    Integer argument1{0};
+    Integer argument2{0};
 };
 
-typedef void (*NativeFunction)(Runtime* rt);
 
+class NativeFunction;
 class Function;
 class String;
 class Map;
@@ -209,7 +209,7 @@ public:
     void SetDouble(Double value);
     void SetFunction(Function* value);
     void SetString(String* value);
-    void SetNativeFunction(NativeFunction value);
+    void SetNativeFunction(NativeFunction* value);
     void SetBoolean(bool value);
     void SetMap(Map* val);
 
@@ -221,7 +221,7 @@ public:
     Double GetDouble(Runtime* rt) const;
     Function* GetFunction(Runtime* rt) const;
     String* GetString(Runtime* rt) const;
-    NativeFunction GetNativeFunction(Runtime* rt) const;
+    NativeFunction* GetNativeFunction(Runtime* rt) const;
     bool GetBoolean(Runtime* rt) const;
     Map* GetMap(Runtime* rt) const;
 
@@ -234,7 +234,7 @@ private:
         Double real;
         Function* function;
         String* string;
-        NativeFunction native;
+        NativeFunction* nativeFunction;
         Map* map;
     } as{Integer{0}};
 };
@@ -242,6 +242,7 @@ private:
 enum class ObjectType {
     String,
     Function,
+    NativeFunction,
     Map,
 };
 
@@ -282,9 +283,11 @@ public:
 
     Value* ConstantAt(Integer index) const;
 
-    void SetArity(Integer arity);
+    void SetStack(Integer arity, Integer localCount);
 
     Integer GetArity() const;
+
+    Integer GetLocalCount() const;
 
     void ReserveByteCode(Runtime* rt, Integer capacity);
 
@@ -296,8 +299,36 @@ public:
 
 private:
     Integer arity{0};
+    Integer localCount{0};
     Vector<ByteCode> byteCode;
     Vector<Value> constants;
+};
+
+class NativeFunction : public Object {
+public:
+    using Handle = void (*)(Runtime*);
+
+    NativeFunction() = default;
+    ~NativeFunction() = default;
+
+    NativeFunction(const NativeFunction&) = delete;
+    NativeFunction& operator=(const NativeFunction&) = delete;
+
+    NativeFunction(NativeFunction&&) = delete;
+    NativeFunction& operator=(NativeFunction&&) = delete;
+
+    void Init(Runtime* rt, Object* next, Integer arity, Integer localCount, Handle handle);
+
+    Integer GetArity() const;
+
+    Integer GetLocalCount() const;
+
+    Handle GetHandle() const;
+
+private:
+    Integer arity{0};
+    Integer localCount{0};
+    Handle handle{nullptr};
 };
 
 class String : public Object {
@@ -372,45 +403,37 @@ public:
     Runtime(Runtime*&) = delete;
     Runtime& operator=(Runtime&&) = delete;
 
-    void Invoke(Integer val);
+    void Invoke(Integer base, Integer argumentCount);
 
-    void PushNil();
-
-    void Pop();
-
-    void Clone();
-
-    Value* Top();
-
-    CallFrame* Frame();
+    CallFrame* CurrentFrame();
 
     System* GetSystem();
 
-    void PushString(const char* message);
-
-    void Throw();
-
     void Interpret();
 
-    Value* StackAt(Integer index);
+    Value* StackAtAbsoluteIndex(Integer index);
 
-    void PushFunction();
+    Value* Local(Integer index);
 
-    void PushMap();
+    Function* NewFunction();
 
-    void PushValue(Value* val);
+    Map* NewMap();
 
-    void LoadGlobal();
+    String* NewString(const char* data);
 
-    void ReadFile();
+    NativeFunction* NewNativeFunction(Integer arity, Integer localCount, NativeFunction::Handle handle);
 
-    void LoadByteCode();
+    void Throw(Integer localNumber);
 
-    void Swap();
+    void LoadGlobal(Integer destLocalNumber, Integer sourceLocalNumber);
 
-    void PushNativeFunction(NativeFunction fn);
+    void LoadConstant(Integer destLocalNumber, Integer sourceConstantNumber);
 
-    void DefineGlobal();
+    void DefineGlobal(Integer keyLocalNumber, Integer valueLocalNumber);
+
+    void Copy(Integer destIndex, Integer sourceIndex);
+
+    void Return(Integer sourceIndex);
 
     template<typename T>
     T* New(Integer length);
@@ -420,8 +443,6 @@ public:
 
     template<typename T>
     void Free(T* ptr, Integer length);
-    
-    static void DoPrint(Runtime* rt);
 
 private:
 

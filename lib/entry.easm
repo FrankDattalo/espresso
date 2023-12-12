@@ -1,17 +1,14 @@
 
-// function declaration
-arity 0
+arity 1
+// function, argument
+locals 3
 
-// body
-loadConstant 1
-loadGlobal
-loadConstant 0
-invoke 1
-pop
-loadConstant 2
-return
+lc %R1 1
+lg %R1 %R1
+lc %R2 0
+invoke %R1 2
+return %R1
 
 // constants
 string "Hello, World!"
 string "print"
-nil

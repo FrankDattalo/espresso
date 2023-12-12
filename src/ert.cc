@@ -1,5 +1,6 @@
 #include "ert.hh"
 #include "esys.hh"
+#include "enat.hh"
 
 namespace espresso {
 
@@ -31,40 +32,21 @@ void Runtime::Init(System* system) {
     this->stack.Init(this);
     this->frames.Init(this);
 
-    // setup empty value so that 
-    // call frames are in proper state
-    this->stack.Push(this)->SetNil();
+    globals = this->NewMap();
 
     CallFrame* initialFrame = this->frames.Push(this);
-    initialFrame->Init(Integer{0}, Integer{0});
+    initialFrame->Init(Integer{0}, Integer{2});
+    // null out the initial stack
+    this->stack.Push(this)->SetNil();
+    this->stack.Push(this)->SetNil();
 
-    this->PushMap();
-    this->globals = Top()->GetMap(this);
-    this->Pop();
+    // load natives
+    Local(Integer{0})->SetNativeFunction(NewNativeFunction(Integer{1}, Integer{2}, espresso::native::RegisterNatives));
+    Invoke(Integer{0}, Integer{1});
 
-    // TODO: make this parameterizeable?
-    // TODO: schma for file formatting
-    this->PushString("lib/entry.bc");
-    this->ReadFile();
-    this->LoadByteCode();
-    // remove the temp nil
-    this->Swap();
-    this->Pop();
-
-    struct NativeEntry {
-        const char* name;
-        NativeFunction fn;
-    };
-
-    constexpr static NativeEntry NATIVES[] = {
-        { "print", Runtime::DoPrint },
-    };
-
-    for (const auto& native: NATIVES) {
-        PushString(native.name);
-        PushNativeFunction(native.fn);
-        DefineGlobal();
-    }
+    // load entrypoint
+    Local(Integer{0})->SetNativeFunction(NewNativeFunction(Integer{1}, Integer{2}, espresso::native::Entrypoint));
+    Invoke(Integer{0}, Integer{1});
 }
 
 void Runtime::DeInit() {
@@ -76,44 +58,77 @@ System* Runtime::GetSystem() {
     return this->system;
 }
 
-void Runtime::Invoke(Integer argumentCount) {
-    // -1 for function itself
-    Integer stackBase = Integer{
-        Frame()->AbsoluteStackSize().Unwrap() - argumentCount.Unwrap() - 1};
-    ValueType val = Frame()->At(this, stackBase)->GetType();
+void Runtime::Invoke(Integer localBase, Integer argumentCount) {
 
-    if (!(val == ValueType::Function || val == ValueType::NativeFunction)) {
-        Panic("Illegal Cast to Function");
+    ValueType fnType = this->Local(localBase)->GetType();
+
+    if (!(fnType == ValueType::Function || fnType == ValueType::NativeFunction)) {
+        this->Local(Integer{0})->SetString(this->NewString("Illegal cast to function"));
+        this->Throw(Integer{0});
         return;
     }
 
-    CallFrame* frame = frames.Push(this);
-    frame->Init(stackBase, argumentCount);
+    Integer localCount = (fnType == ValueType::Function)
+        ? Local(localBase)->GetFunction(this)->GetLocalCount()
+        : Local(localBase)->GetNativeFunction(this)->GetLocalCount();
 
-    if (val == ValueType::Function) {
-        Integer arity = Frame()->At(this, stackBase)->GetFunction(this)->GetArity();
-        if (argumentCount.Unwrap() != arity.Unwrap()) {
-            this->PushString("Invalid arity");
-            this->Throw();
-            return;
+    Integer arity = (fnType == ValueType::Function)
+        ? Local(localBase)->GetFunction(this)->GetArity()
+        : Local(localBase)->GetNativeFunction(this)->GetArity();
+
+    if (localCount.Unwrap() <= 0) {
+        Panic("Invalid local count");
+        return;
+    }
+
+    if (argumentCount.Unwrap() <= 0) {
+        Panic("Invalid argument count");
+        return;
+    }
+
+    if (argumentCount.Unwrap() > localCount.Unwrap()) {
+        Panic("Invalid argument count");
+        return;
+    }
+
+    if (arity.Unwrap() != argumentCount.Unwrap()) {
+        Local(Integer{0})->SetString(NewString("Invalid arity"));
+        Throw(Integer{0});
+        return;
+    }
+
+    Integer absoluteBase = CurrentFrame()->AbsoluteIndex(localBase);
+    frames.Push(this)->Init(absoluteBase, localCount);
+
+    // prepare the new stack
+
+    // 1. all the locals that are consumed by arguments should be set to nil
+    // 2. the actual stack needs to expand to fit all the new locals
+    std::int64_t newStackTop = CurrentFrame()->AbsoluteIndex(localCount).Unwrap();
+    // +1 for function itself
+    std::int64_t lastValidIndex = CurrentFrame()->AbsoluteIndex(argumentCount).Unwrap();
+    for(std::int64_t i = CurrentFrame()->AbsoluteIndex(Integer{0}).Unwrap(); i < newStackTop; i++) {
+        if (stack.Length().Unwrap() <= i) {
+            stack.Push(this)->SetNil();
         }
+        if (i > lastValidIndex) {
+            Local(Integer{i})->SetNil();
+        }
+    }
+
+    // enter the actual function here
+
+    if (fnType == ValueType::Function) {
         this->Interpret();
 
     } else /* val == ValueType::NativeFunction */ {
-        NativeFunction fn = frame->At(this, Integer{0})->GetNativeFunction(this);
-        fn(this);
+        NativeFunction* fn = Local(Integer{0})->GetNativeFunction(this);
+        NativeFunction::Handle handle = fn->GetHandle();
+        handle(this);
     }
 
-    // return logic of transfering stack result to the right spot
-    Integer resultFrameIndex = Integer{this->frames.Length().Unwrap() - 2};
-    CallFrame* resultFrame = this->frames.At(resultFrameIndex);
-    Integer currentResultFrameSize = resultFrame->Size();
-    // -1 for function itself should be here, but this is negated by the push of the result
-    Integer newResultFrameSize = Integer{currentResultFrameSize.Unwrap() - argumentCount.Unwrap()};
-    resultFrame->SetSize(newResultFrameSize);
-    resultFrame->At(this, Integer{newResultFrameSize.Unwrap() - 1})->Copy(this, Top());
+    // pop from the frame, return is already in the right spot
     this->frames.Pop();
-    this->stack.Truncate(resultFrame->AbsoluteStackSize());
 }
 
 template<typename T>
@@ -271,7 +286,7 @@ const T* Vector<T>::RawHeadPointer() const {
     return this->data;
 }
 
-CallFrame* Runtime::Frame() {
+CallFrame* Runtime::CurrentFrame() {
     Integer length = frames.Length();
     Integer last = Integer{length.Unwrap() - 1};
     return frames.At(last);
@@ -280,12 +295,11 @@ CallFrame* Runtime::Frame() {
 void CallFrame::Init(Integer stackBase, Integer argumentCount) {
     this->stackBase = stackBase;
     this->programCounter = Integer{0};
-    // 1 for the function itself
-    this->stackSize = Integer{1 + argumentCount.Unwrap()};
+    this->stackSize = Integer{argumentCount.Unwrap()};
 }
 
-Integer CallFrame::AbsoluteStackSize() const {
-    return Integer{this->stackBase.Unwrap() + this->stackSize.Unwrap()};
+Integer CallFrame::AbsoluteIndex(Integer localIndex) const {
+    return Integer{this->stackBase.Unwrap() + localIndex.Unwrap()};
 }
 
 void Value::SetNil() {
@@ -293,36 +307,42 @@ void Value::SetNil() {
     this->as.integer = Integer{0};
 }
 
+void Runtime::LoadConstant(Integer dest, Integer constant) {
+    Function* function = Local(Integer{0})->GetFunction(this);
+    this->Local(dest)->Copy(this, function->ConstantAt(constant));
+}
+
+void Runtime::Return(Integer sourceIndex) {
+    this->Local(Integer{0})->Copy(this, this->Local(sourceIndex));
+}
+
 void Runtime::Interpret() {
     while (true) {
-        Function* function = Frame()->At(this, Integer{0})->GetFunction(this);
-        ByteCode* byteCode = function->ByteCodeAt(Frame()->ProgramCounter());
+        Function* function = Local(Integer{0})->GetFunction(this);
+        ByteCode* byteCode = function->ByteCodeAt(CurrentFrame()->ProgramCounter());
         switch (byteCode->Type()) {
             case ByteCodeType::NoOp: {
-                Frame()->AdvanceProgramCounter();
+                CurrentFrame()->AdvanceProgramCounter();
                 break;
             }
             case ByteCodeType::Invoke: {
-                Frame()->AdvanceProgramCounter();
-                Invoke(byteCode->Argument());
+                CurrentFrame()->AdvanceProgramCounter();
+                Invoke(byteCode->Argument1(), byteCode->Argument2());
                 break;
             }
             case ByteCodeType::LoadConstant: {
-                Frame()->AdvanceProgramCounter();
-                this->PushValue(function->ConstantAt(byteCode->Argument()));
+                CurrentFrame()->AdvanceProgramCounter();
+                LoadConstant(byteCode->Argument1(), byteCode->Argument2());
                 break;
             }
             case ByteCodeType::LoadGlobal: {
-                Frame()->AdvanceProgramCounter();
-                this->LoadGlobal();
-                break;
-            }
-            case ByteCodeType::Pop: {
-                Frame()->AdvanceProgramCounter();
-                this->Pop();
+                CurrentFrame()->AdvanceProgramCounter();
+                this->LoadGlobal(byteCode->Argument1(), byteCode->Argument2());
                 break;
             }
             case ByteCodeType::Return: {
+                CurrentFrame()->AdvanceProgramCounter();
+                this->Return(byteCode->Argument1());
                 return;
             }
             default: {
@@ -333,6 +353,10 @@ void Runtime::Interpret() {
     }
 }
 
+Value* Runtime::Local(Integer num) {
+    return CurrentFrame()->At(this, num);
+}
+
 Value* CallFrame::At(Runtime* rt, Integer index) {
     if (index.Unwrap() >= this->stackSize.Unwrap() || index.Unwrap() < 0) {
         Panic("Stack underflow");
@@ -341,68 +365,67 @@ Value* CallFrame::At(Runtime* rt, Integer index) {
 
     std::int64_t absoluteIndex = this->stackBase.Unwrap() + index.Unwrap();
 
-    return rt->StackAt(Integer{absoluteIndex});
+    return rt->StackAtAbsoluteIndex(Integer{absoluteIndex});
 }
 
-Value* Runtime::StackAt(Integer index) {
+Value* Runtime::StackAtAbsoluteIndex(Integer index) {
     return this->stack.At(index);
+}
+
+void Runtime::Copy(Integer destIndex, Integer sourceIndex) {
+    this->Local(destIndex)->Copy(this, this->Local(sourceIndex));
 }
 
 ValueType Value::GetType() const {
     return this->type;
 }
 
-void Runtime::Throw() {
-    Integer stackIndex = Integer{Frame()->AbsoluteStackSize().Unwrap() - 1};
+void Runtime::Throw(Integer idx) {
+    Integer stackIndex = Integer{CurrentFrame()->AbsoluteIndex(idx)};
     throw ThrowException{stackIndex};
 }
 
-void Runtime::PushNativeFunction(NativeFunction fn) {
-    PushNil();
-    Top()->SetNativeFunction(fn);
+NativeFunction* Runtime::NewNativeFunction(Integer arity, Integer localCount, NativeFunction::Handle fn) {
+    NativeFunction* function = this->New<NativeFunction>(Integer{1});
+    function->Init(this, this->heap, arity, localCount, fn);
+    this->heap = function;
+    return function;
 }
 
-void Runtime::DefineGlobal() {
-    CallFrame* frame = Frame();
-    Integer value = Integer{frame->Size().Unwrap() - 1};
-    Integer key = Integer{frame->Size().Unwrap() - 2};
-    globals->Put(this, frame->At(this, key), frame->At(this, value));
-    Pop();
-    Pop();
+void NativeFunction::Init(Runtime* rt, Object* next, Integer arity, Integer locals, NativeFunction::Handle fn) {
+    (void)(rt);
+
+    this->ObjectInit(ObjectType::NativeFunction, next);
+    this->arity = arity;
+    this->localCount = locals;
+    this->handle = fn;
 }
 
-void Runtime::PushString(const char* message) {
-    PushNil();
+Integer NativeFunction::GetArity() const {
+    return this->arity;
+}
+
+Integer NativeFunction::GetLocalCount() const {
+    return this->localCount;
+}
+
+NativeFunction::Handle NativeFunction::GetHandle() const {
+    return this->handle;
+}
+
+void Runtime::DefineGlobal(Integer keyIndex, Integer valueIndex) {
+    Value* key = Local(keyIndex);
+    Value* value = Local(valueIndex);
+    globals->Put(this, key, value);
+}
+
+String* Runtime::NewString(const char* message) {
     // TODO: size converstion checking
     Integer length = Integer{static_cast<std::int64_t>(std::strlen(message))};
     String* str = this->New<String>(Integer{1});
     str->Init(this, this->heap, length, message);
-    Top()->SetString(str);
     this->heap = str;
-}
-
-Value* Runtime::Top() {
-    CallFrame* frame = Frame();
-    return frame->At(this, Integer{frame->Size().Unwrap() - 1});
-}
-
-Integer CallFrame::Size() const {
-    return this->stackSize;
-}
-
-void CallFrame::SetSize(Integer value) {
-    if (value.Unwrap() < 0) {
-        Panic("SetSize");
-        return;
-    }
-    this->stackSize = value;
-}
-
-void Runtime::PushNil() {
-    CallFrame* frame = Frame();
-    Integer prevSize = frame->Size();
-    this->stack.Push(this)->SetNil();
-    frame->SetSize(Integer{1 + prevSize.Unwrap()});
+    return str;
 }
 
 void String::Init(Runtime* rt, Object* next, Integer length, const char* data) {
@@ -420,20 +443,18 @@ void Object::ObjectInit(ObjectType type, Object* next) {
     this->next = next;
 }
 
-void Runtime::PushFunction() {
-    PushNil();
+Function* Runtime::NewFunction() {
     Function* function = this->New<Function>(Integer{1});
     function->Init(this, this->heap);
-    Top()->SetFunction(function);
     this->heap = function;
+    return function;
 }
 
-void Runtime::PushMap() {
-    PushNil();
+Map* Runtime::NewMap() {
     Map* map = this->New<Map>(Integer{1});
     map->Init(this, this->heap);
-    Top()->SetMap(map);
     this->heap = map;
+    return map;
 }
 
 void Function::Init(Runtime* rt, Object* next) {
@@ -443,12 +464,20 @@ void Function::Init(Runtime* rt, Object* next) {
     this->constants.Init(rt);
 }
 
+Integer Function::GetLocalCount() const {
+    return this->localCount;
+}
+
 ByteCodeType ByteCode::Type() const {
     return this->type;
 }
 
-Integer ByteCode::Argument() const {
-    return this->argument;
+Integer ByteCode::Argument1() const {
+    return this->argument1;
+}
+
+Integer ByteCode::Argument2() const {
+    return this->argument2;
 }
 
 ByteCode* Function::ByteCodeAt(Integer index) const {
@@ -534,14 +563,14 @@ bool Value::GetBoolean(Runtime* rt) const {
     return static_cast<bool>(this->as.integer.Unwrap());
 }
 
-void Value::SetNativeFunction(NativeFunction val) {
-    this->as.native = val;
+void Value::SetNativeFunction(NativeFunction* val) {
+    this->as.nativeFunction = val;
     this->type = ValueType::NativeFunction;
 }
 
-NativeFunction Value::GetNativeFunction(Runtime* rt) const {
+NativeFunction* Value::GetNativeFunction(Runtime* rt) const {
     this->AssertType(rt, ValueType::NativeFunction);
-    return this->as.native;
+    return this->as.nativeFunction;
 }
 
 void Value::SetFunction(Function* val) {
@@ -578,8 +607,8 @@ void Value::AssertType(Runtime* rt, ValueType expected) const {
     if (this->GetType() == expected) {
         return;
     }
-    rt->PushString("Illegal Cast");
-    rt->Throw();
+    rt->Local(Integer{0})->SetString(rt->NewString("Illegal Cast"));
+    rt->Throw(Integer{0});
 }
 
 void CallFrame::AdvanceProgramCounter() {
@@ -590,28 +619,21 @@ Integer CallFrame::ProgramCounter() const {
     return this->programCounter;
 }
 
-void Runtime::Pop() {
-    CallFrame* frame = Frame();
-    Integer currentSize = frame->Size();
-    frame->SetSize(Integer{currentSize.Unwrap() - 1});
-    this->stack.Truncate(frame->AbsoluteStackSize());
-}
+void Runtime::LoadGlobal(Integer destIndex, Integer keyIndex) {
+    Value* dest = Local(destIndex);
+    Value* key = Local(keyIndex);
 
-void Runtime::PushValue(Value* other) {
-    PushNil();
-    Top()->Copy(this, other);
-}
-
-void Runtime::LoadGlobal() {
-    Value* key = Top();
     key->AssertType(this, ValueType::String);
+
     Value* result = this->globals->Get(this, key);
+
     if (result != nullptr) {
-        key->Copy(this, result);
+        dest->Copy(this, result);
         return;
     }
-    PushString("Undefined");
-    Throw();
+
+    this->Local(Integer{0})->SetString(this->NewString("Undefined Global"));
+    this->Throw(Integer{0});
 }
 
 Value* Map::Get(Runtime* rt, Value* key) {
@@ -734,90 +756,48 @@ Value* Function::PushConstant(Runtime* rt) {
     return this->constants.Push(rt);
 }
 
-void Function::SetArity(Integer arity) {
+void Function::SetStack(Integer arity, Integer localCount) {
     this->arity = arity;
+    this->localCount = localCount;
 }
 
-void Runtime::Swap() {
-    PushNil();
-    CallFrame* frame = Frame();
-    std::int64_t temp = frame->Size().Unwrap() - 1;
-    std::int64_t top = frame->Size().Unwrap() - 2;
-    std::int64_t bottom = frame->Size().Unwrap() - 3;
-    frame->At(this, Integer{temp})->Copy(this, frame->At(this, Integer{bottom}));
-    frame->At(this, Integer{bottom})->Copy(this, frame->At(this, Integer{top}));
-    frame->At(this, Integer{top})->Copy(this, frame->At(this, Integer{temp}));
-    Pop();
-}
+void ByteCode::Init(Runtime* rt, uint32_t val) {
+    uint32_t op = val & OP_BITS;
+    uint16_t arg1 = (val & ARG1_BITS) >> ARG_BITS_COUNT;
+    uint16_t arg2 = val & ARG2_BITS;
 
-void ByteCode::Init(Runtime* rt, uint16_t val) {
-    uint16_t op = val & OP_BITS;
-    uint16_t value = val & VALUE_BITS;
+    this->argument1 = Integer{arg1};
+    this->argument2 = Integer{arg2};
+
     switch (op) {
         case OP_LOAD_CONSTANT: {
             this->type = ByteCodeType::LoadConstant;
-            this->argument = Integer{value};
             return;
         }
         case OP_LOAD_GLOBAL: {
             this->type = ByteCodeType::LoadGlobal;
-            this->argument = Integer{value};
             return;
         }
         case OP_INVOKE: {
             this->type = ByteCodeType::Invoke;
-            this->argument = Integer{value};
-            return;
-        }
-        case OP_POP: {
-            this->type = ByteCodeType::Pop;
-            this->argument = Integer{value};
             return;
         }
         case OP_RETURN: {
             this->type = ByteCodeType::Return;
-            this->argument = Integer{value};
             return;
         }
         default: {
-            rt->PushString("Invalid ByteCode");
-            rt->Throw();
+            rt->Local(Integer{0})->SetString(rt->NewString("Invalid ByteCode"));
+            rt->Throw(Integer{0});
             return;
         }
     }
 }
 
-void Runtime::ReadFile() {
-    String* fileName = Top()->GetString(this);
-    const char* fileNameCString = fileName->RawPointer();
-    FILE* fp = system->Open(fileNameCString, "rb");
-    if (fp == nullptr) {
-        PushString("Could not open file");
-        Throw();
-        return;
-    }
-    PushString("");
-    String* dest = Top()->GetString(this);
-    int c = EOF;
-    dest->Clear();
-    while ((c = system->Read(fp)) != EOF) {
-        dest->Push(this, static_cast<char>(c));
-    }
-    system->Close(fp);
-    dest->Push(this, '\0');
-    Swap();
-    Pop();
-}
 
 const char* String::RawPointer() const {
     return this->data.RawHeadPointer();
 }
 
-void Runtime::DoPrint(Runtime* rt) {
-    String* str = rt->Top()->GetString(rt);
-    rt->system->Write(rt->system->Stdout(), str->RawPointer(), str->Length().Unwrap());
-    rt->system->Write(rt->system->Stdout(), "\n", 1);
-    rt->PushNil();
-}
 
 }

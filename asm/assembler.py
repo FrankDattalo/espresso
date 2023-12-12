@@ -2,14 +2,18 @@ import sys
 import pprint
 import ctypes
 
-OP_BITS          = 0b1111_1000_0000_0000
-OP_LOAD_CONSTANT = 0b0000_0000_0000_0000, 'loadConstant'
-OP_LOAD_GLOBAL   = 0b0000_1000_0000_0000, 'loadGlobal'
-OP_INVOKE        = 0b0001_0000_0000_0000, 'invoke'
-OP_POP           = 0b0001_1000_0000_0000, 'pop'
-OP_RETURN        = 0b0010_0000_0000_0000, 'return'
-VALUE_BITS       = 0b0000_0111_1111_1111
+# OpCode structure -
+# [Operation - 8 bits, Arg1 - 12 bits, ARG2 - 12 bits]
+OP_BITS          = 0b1111_1111_0000_0000_0000_0000_0000_0000
+ARG1_BITS        = 0b0000_0000_1111_1111_1111_0000_0000_0000
+ARG2_BITS        = 0b0000_0000_0000_0000_0000_1111_1111_1111
+OP_LOAD_CONSTANT = 0b0000_0001_0000_0000_0000_0000_0000_0000, 'lc'
+OP_LOAD_GLOBAL   = 0b0000_0010_0000_0000_0000_0000_0000_0000, 'gc'
+OP_INVOKE        = 0b0000_0011_0000_0000_0000_0000_0000_0000, 'invoke'
+OP_RETURN        = 0b0000_0100_0000_0000_0000_0000_0000_0000, 'return'
 
+# Constant structure -
+# [Tag - 8 bits, Variable length depending on tag ...]
 CONST_BITS   = 0b11111111
 CONST_NIL    = 0b00000000, 'nil'
 CONST_INT    = 0b00000001, 'int'
@@ -40,7 +44,7 @@ def main():
     source = [ item for item in source if len(item) > 0 ]
 
     def new_context():
-        return {"arity": 0, "opcodes": [], "constants": []}
+        return {"arity": 0, "locals": 0, "opcodes": [], "constants": []}
 
     assembler = {
         "index": 0,
@@ -70,39 +74,48 @@ def main():
     def writeI64(v):
         assembler['output'] += int.to_bytes(v, byteorder='big', signed=True, length=8)
 
-    def assembler_next():
+    def next():
         curr = assembler['source'][assembler['index']]
         assembler['index'] += 1
         return curr
 
-    def assembler_next_opcode_argument():
-        curr = int(assembler_next())
-        if curr != curr & VALUE_BITS:
-            raise Exception(f'Value is too large for opcode argument: {curr}')
-        return curr
+    def next_register():
+        reg = next()
+        if not reg.startswith('%R'):
+            raise Exception(f'Invalid register: {reg}')
+        reg = int(reg[len('%R'):])
+        return reg
+
+    def next_int():
+        return int(next())
 
     def arity():
-        assembler['contexts'][-1]['arity'] = int(assembler_next())
+        assembler['contexts'][-1]['arity'] = next_int()
+
+    def locals():
+        assembler['contexts'][-1]['locals'] = next_int()
 
     def load_constant():
-        constant_number = assembler_next_opcode_argument()
-        emit((OP_LOAD_CONSTANT, constant_number))
+        dest_reg = next_register()
+        const_number = next_int()
+        emit((OP_LOAD_CONSTANT, dest_reg, const_number))
 
     def load_global():
-        emit((OP_LOAD_GLOBAL, 0))
+        dest_reg = next_register()
+        source_reg = next_register()
+        emit((OP_LOAD_GLOBAL, dest_reg, source_reg))
 
     def invoke():
-        argument_count = assembler_next_opcode_argument()
-        emit((OP_INVOKE, argument_count))
+        base_reg = next_register()
+        argument_count = next_int()
+        emit((OP_INVOKE, base_reg, argument_count))
 
     def op_return():
-        emit((OP_RETURN, 0))
-
-    def pop():
-        emit((OP_POP, 0))
+        base_reg = next_register()
+        emit((OP_RETURN, base_reg, 0))
 
     def string():
-        val = assembler_next()
+        val = next()
         val = val[1:-1]
         constant((CONST_STRING, val))
 
@@ -110,7 +123,7 @@ def main():
         constant((CONST_NIL, None))
 
     def integer():
-        val = int(assembler_next())
+        val = next_int()
         constant((CONST_INT, val))
 
     def function():
@@ -122,10 +135,10 @@ def main():
 
     handlers = {
         'arity': arity,
-        'loadConstant': load_constant,
-        'loadGlobal': load_global,
+        'locals': locals,
+        'lc': load_constant,
+        'lg': load_global,
         'invoke': invoke,
-        'pop': pop,
         'string': string,
         'function': function,
         'endfunction': endfunction,
@@ -135,7 +148,7 @@ def main():
     }
 
     while assembler['index'] < len(assembler['source']):
-        curr = assembler_next()
+        curr = next()
         if curr not in handlers:
             raise Exception(f'Invalid operation: {curr} at {assembler["index"]} {source}')
         handler = handlers[curr]
@@ -163,10 +176,12 @@ def main():
 
     def write_function(func):
         writeU16(func['arity'])
+        writeU16(func['locals'])
         writeU16(len(func['opcodes']))
-        for ((op, _name), arg) in func['opcodes']:
-            full = op | arg
-            writeU16(full)
+        for ((op, _name), arg1, arg2) in func['opcodes']:
+            arg1 = arg1 << 12
+            full = op | arg1 | arg2
+            writeU32(full)
         writeU16(len(func['constants']))
         for constant in func['constants']:
             write_constant(constant)

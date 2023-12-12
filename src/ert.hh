@@ -257,7 +257,7 @@ public:
     bool GetBoolean(Runtime* rt) const;
     Map* GetMap(Runtime* rt) const;
 
-    void Copy(Runtime* rt, Value* other);
+    void Copy(Value* other);
 
 private:
     ValueType type{ValueType::Nil};

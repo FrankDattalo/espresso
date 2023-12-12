@@ -25,7 +25,7 @@ int Espresso::Load(const char* name) {
         rt->Invoke(Integer{0}, Integer{2});
         return 0;
     } catch (const ThrowException& e) {
-        rt->Local(Integer{2})->Copy(rt, rt->StackAtAbsoluteIndex(e.GetAbsoluteStackIndex()));
+        rt->Local(Integer{2})->Copy(rt->StackAtAbsoluteIndex(e.GetAbsoluteStackIndex()));
 
         rt->Local(Integer{0})->SetString(rt->NewString("print"));
         rt->Local(Integer{1})->SetString(rt->NewString("ERROR Uncaught Exception:"));

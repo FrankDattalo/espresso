@@ -309,11 +309,11 @@ void Value::SetNil() {
 
 void Runtime::LoadConstant(Integer dest, Integer constant) {
     Function* function = Local(Integer{0})->GetFunction(this);
-    this->Local(dest)->Copy(this, function->ConstantAt(constant));
+    this->Local(dest)->Copy(function->ConstantAt(constant));
 }
 
 void Runtime::Return(Integer sourceIndex) {
-    this->Local(Integer{0})->Copy(this, this->Local(sourceIndex));
+    this->Local(Integer{0})->Copy(this->Local(sourceIndex));
 }
 
 void Runtime::Interpret() {
@@ -429,7 +429,7 @@ Value* Runtime::StackAtAbsoluteIndex(Integer index) {
 }
 
 void Runtime::Copy(Integer destIndex, Integer sourceIndex) {
-    this->Local(destIndex)->Copy(this, this->Local(sourceIndex));
+    this->Local(destIndex)->Copy(this->Local(sourceIndex));
 }
 
 void Runtime::Equal(Integer dest, Integer arg1, Integer arg2) {
@@ -660,45 +660,9 @@ bool Value::IsTruthy() const {
     }
 }
 
-void Value::Copy(Runtime* rt, Value* other) {
-    switch (other->GetType()) {
-        case ValueType::Boolean: {
-            this->SetBoolean(other->GetBoolean(rt));
-            break;
-        }
-        case ValueType::Double: {
-            this->SetDouble(other->GetDouble(rt));
-            break;
-        }
-        case ValueType::Function: {
-            this->SetFunction(other->GetFunction(rt));
-            break;
-        }
-        case ValueType::Integer: {
-            this->SetInteger(other->GetInteger(rt));
-            break;
-        }
-        case ValueType::NativeFunction: {
-            this->SetNativeFunction(other->GetNativeFunction(rt));
-            break;
-        }
-        case ValueType::Nil: {
-            this->SetNil();
-            break;
-        }
-        case ValueType::String: {
-            this->SetString(other->GetString(rt));
-            break;
-        }
-        case ValueType::Map: {
-            this->SetMap(other->GetMap(rt));
-            break;
-        }
-        default: {
-            Panic("Unhandled ValueType in Copy");
-            return;
-        }
-    }
+void Value::Copy(Value* other) {
+    this->type = other->type;
+    this->as = other->as;
 }
 
 void Value::SetDouble(Double val) {
@@ -800,8 +764,10 @@ void Runtime::LoadGlobal(Integer destIndex, Integer keyIndex) {
     Value* result = this->globals->Get(this, key);
 
     if (result != nullptr) {
-        dest->Copy(this, result);
+        dest->Copy(result);
         return;
+    } else {
+        dest->SetNil();
     }
 
     this->Local(Integer{0})->SetString(this->NewString("Undefined Global"));
@@ -832,8 +798,8 @@ void Map::Put(Runtime* rt, Value* key, Value* value) {
     if (existing == nullptr) {
         existing = this->entries.Push(rt);
     }
-    existing->key.Copy(rt, key);
-    existing->value.Copy(rt, value);
+    existing->key.Copy(key);
+    existing->value.Copy(value);
 }
 
 void Map::Init(Runtime* rt, Object* next) {

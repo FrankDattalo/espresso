@@ -22,7 +22,6 @@ loadc %R1 #C function
 
     return %R1
 
-
     locals #R
 end
 

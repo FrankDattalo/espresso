@@ -161,7 +161,7 @@ def main():
     def copy():
         dest = next_register()
         source = next_register()
-        emit(OP_COPY | Arg1(dest) | Arg1(source))
+        emit(OP_COPY | Arg1(dest) | Arg2(source))
 
     def equal():
         dest = next_register()

@@ -403,7 +403,7 @@ void Runtime::Interpret() {
                 Integer arg1 = byteCode->SmallArgument1();
                 Integer dest = byteCode->LargeArgument();
                 bool result = Local(arg1)->IsTruthy();
-                if (result) {
+                if (!result) {
                     CurrentFrame()->SetProgramCounter(dest);
                 }
                 break;

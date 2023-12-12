@@ -35,17 +35,15 @@ void Runtime::Init(System* system) {
     globals = this->NewMap();
 
     CallFrame* initialFrame = this->frames.Push(this);
-    initialFrame->Init(Integer{0}, Integer{2});
+    initialFrame->Init(Integer{0}, Integer{4});
     // null out the initial stack
+    this->stack.Push(this)->SetNil();
+    this->stack.Push(this)->SetNil();
     this->stack.Push(this)->SetNil();
     this->stack.Push(this)->SetNil();
 
     // load natives
     Local(Integer{0})->SetNativeFunction(NewNativeFunction(Integer{1}, Integer{2}, espresso::native::RegisterNatives));
-    Invoke(Integer{0}, Integer{1});
-
-    // load entrypoint
-    Local(Integer{0})->SetNativeFunction(NewNativeFunction(Integer{1}, Integer{2}, espresso::native::Entrypoint));
     Invoke(Integer{0}, Integer{1});
 }
 
@@ -86,34 +84,37 @@ void Runtime::Invoke(Integer localBase, Integer argumentCount) {
         return;
     }
 
-    if (argumentCount.Unwrap() > localCount.Unwrap()) {
-        Panic("Invalid argument count");
-        return;
-    }
-
+    // Too Many / Too Few args passed
     if (arity.Unwrap() != argumentCount.Unwrap()) {
         Local(Integer{0})->SetString(NewString("Invalid arity"));
         Throw(Integer{0});
         return;
     }
 
+    if (argumentCount.Unwrap() > localCount.Unwrap()) {
+        Panic("Invalid argument count");
+        return;
+    }
+
     Integer absoluteBase = CurrentFrame()->AbsoluteIndex(localBase);
     frames.Push(this)->Init(absoluteBase, localCount);
 
-    // prepare the new stack
+    RuntimeDefer popFrameAtEnd(this, [](Runtime* rt) {
+        rt->frames.Pop();
+    });
 
-    // 1. all the locals that are consumed by arguments should be set to nil
-    // 2. the actual stack needs to expand to fit all the new locals
-    std::int64_t newStackTop = CurrentFrame()->AbsoluteIndex(localCount).Unwrap();
-    // +1 for function itself
-    std::int64_t lastValidIndex = CurrentFrame()->AbsoluteIndex(argumentCount).Unwrap();
-    for(std::int64_t i = CurrentFrame()->AbsoluteIndex(Integer{0}).Unwrap(); i < newStackTop; i++) {
-        if (stack.Length().Unwrap() <= i) {
-            stack.Push(this)->SetNil();
-        }
-        if (i > lastValidIndex) {
-            Local(Integer{i})->SetNil();
-        }
+    // prepare the new stack
+    // 1. grow the stack until it's at least as large as the new top
+    std::int64_t newAbsoluteStackSize = CurrentFrame()->AbsoluteIndex(localCount).Unwrap();
+    while (stack.Length().Unwrap() < newAbsoluteStackSize) {
+        stack.Push(this)->SetNil();
+    }
+
+    // 2. Nullify all memory that is not assigned yet
+    std::int64_t startIndex = argumentCount.Unwrap();
+    std::int64_t frameSize = CurrentFrame()->Size().Unwrap();
+    for(std::int64_t i = startIndex; i < frameSize; i++) {
+        Local(Integer{i})->SetNil();
     }
 
     // enter the actual function here
@@ -126,9 +127,6 @@ void Runtime::Invoke(Integer localBase, Integer argumentCount) {
         NativeFunction::Handle handle = fn->GetHandle();
         handle(this);
     }
-
-    // pop from the frame, return is already in the right spot
-    this->frames.Pop();
 }
 
 template<typename T>
@@ -162,6 +160,19 @@ template<typename T>
 void Runtime::Free(T* pointer, Integer count) {
     // TODO: size checking
     this->system->ReAllocate(pointer, sizeof(T) * count.Unwrap(), 0);
+}
+
+RuntimeDefer::RuntimeDefer(Runtime* rt, RuntimeDefer::Handle fn)
+: runtime{rt}
+, handle{fn}
+{}
+
+RuntimeDefer::~RuntimeDefer() {
+    this->handle(this->runtime);
+}
+
+Integer ThrowException::GetAbsoluteStackIndex() const {
+    return this->stackIndex;
 }
 
 void* DefaultSystem::ReAllocate(
@@ -302,6 +313,10 @@ Integer CallFrame::AbsoluteIndex(Integer localIndex) const {
     return Integer{this->stackBase.Unwrap() + localIndex.Unwrap()};
 }
 
+Integer CallFrame::Size() const {
+    return this->stackSize;
+}
+
 void Value::SetNil() {
     this->type = ValueType::Nil;
     this->as.integer = Integer{0};
@@ -327,23 +342,71 @@ void Runtime::Interpret() {
             }
             case ByteCodeType::Invoke: {
                 CurrentFrame()->AdvanceProgramCounter();
-                Invoke(byteCode->Argument1(), byteCode->Argument2());
+                Integer arg1 = byteCode->SmallArgument1();
+                Integer arg2 = byteCode->SmallArgument2();
+                Invoke(arg1, arg2);
                 break;
             }
             case ByteCodeType::LoadConstant: {
                 CurrentFrame()->AdvanceProgramCounter();
-                LoadConstant(byteCode->Argument1(), byteCode->Argument2());
+                Integer arg1 = byteCode->SmallArgument1();
+                Integer arg2 = byteCode->LargeArgument();
+                LoadConstant(arg1, arg2);
                 break;
             }
             case ByteCodeType::LoadGlobal: {
                 CurrentFrame()->AdvanceProgramCounter();
-                this->LoadGlobal(byteCode->Argument1(), byteCode->Argument2());
+                Integer arg1 = byteCode->SmallArgument1();
+                Integer arg2 = byteCode->SmallArgument2();
+                this->LoadGlobal(arg1, arg2);
                 break;
             }
             case ByteCodeType::Return: {
                 CurrentFrame()->AdvanceProgramCounter();
-                this->Return(byteCode->Argument1());
+                Integer arg1 = byteCode->SmallArgument1();
+                this->Return(arg1);
                 return;
+            }
+            case ByteCodeType::Copy: {
+                CurrentFrame()->AdvanceProgramCounter();
+                Integer arg1 = byteCode->SmallArgument1();
+                Integer arg2 = byteCode->SmallArgument2();
+                this->Copy(arg1, arg2);
+                break;
+            }
+            case ByteCodeType::Equal: {
+                CurrentFrame()->AdvanceProgramCounter();
+                Integer arg1 = byteCode->SmallArgument1();
+                Integer arg2 = byteCode->SmallArgument2();
+                Integer arg3 = byteCode->SmallArgument3();
+                this->Equal(arg1, arg2, arg3);
+                break;
+            }
+            case ByteCodeType::Subtract: {
+                CurrentFrame()->AdvanceProgramCounter();
+                Integer arg1 = byteCode->SmallArgument1();
+                Integer arg2 = byteCode->SmallArgument2();
+                Integer arg3 = byteCode->SmallArgument3();
+                this->Subtract(arg1, arg2, arg3);
+                break;
+            }
+            case ByteCodeType::Multiply: {
+                CurrentFrame()->AdvanceProgramCounter();
+                Integer arg1 = byteCode->SmallArgument1();
+                Integer arg2 = byteCode->SmallArgument2();
+                Integer arg3 = byteCode->SmallArgument3();
+                this->Multiply(arg1, arg2, arg3);
+                break;
+            }
+            case ByteCodeType::JumpIfFalse: {
+                CurrentFrame()->AdvanceProgramCounter();
+                Integer arg1 = byteCode->SmallArgument1();
+                Integer dest = byteCode->LargeArgument();
+                bool result = Local(arg1)->IsTruthy();
+                if (result) {
+                    CurrentFrame()->SetProgramCounter(dest);
+                }
+                break;
             }
             default: {
                 Panic("Unknown ByteCode");
@@ -374,6 +437,28 @@ Value* Runtime::StackAtAbsoluteIndex(Integer index) {
 
 void Runtime::Copy(Integer destIndex, Integer sourceIndex) {
     this->Local(destIndex)->Copy(this, this->Local(sourceIndex));
+}
+
+void Runtime::Equal(Integer dest, Integer arg1, Integer arg2) {
+    Local(dest)->SetBoolean(Local(arg1)->Equals(this, Local(arg2)));
+}
+
+void Runtime::Subtract(Integer dest, Integer arg1, Integer arg2) {
+    // TODO: rest of the types
+    Local(dest)->SetInteger(
+        Integer{
+            Local(arg1)->GetInteger(this).Unwrap() - Local(arg2)->GetInteger(this).Unwrap()
+        }
+    );
+}
+
+void Runtime::Multiply(Integer dest, Integer arg1, Integer arg2) {
+    // TODO: rest of the types
+    Local(dest)->SetInteger(
+        Integer{
+            Local(arg1)->GetInteger(this).Unwrap() * Local(arg2)->GetInteger(this).Unwrap()
+        }
+    );
 }
 
 ValueType Value::GetType() const {
@@ -469,15 +554,23 @@ Integer Function::GetLocalCount() const {
 }
 
 ByteCodeType ByteCode::Type() const {
-    return this->type;
+    return static_cast<ByteCodeType>(this->value & bits::OP_BITS);
 }
 
-Integer ByteCode::Argument1() const {
-    return this->argument1;
+Integer ByteCode::SmallArgument1() const {
+    return Integer{(this->value & bits::ARG1_BITS) >> bits::ARG1_SHIFT};
 }
 
-Integer ByteCode::Argument2() const {
-    return this->argument2;
+Integer ByteCode::SmallArgument2() const {
+    return Integer{(this->value & bits::ARG2_BITS) >> bits::ARG2_SHIFT};
+}
+
+Integer ByteCode::SmallArgument3() const {
+    return Integer{(this->value & bits::ARG3_BITS) >> bits::ARG3_SHIFT};
+}
+
+Integer ByteCode::LargeArgument() const {
+    return Integer{(this->value & bits::LARGE_ARG_BITS) >> bits::LARGE_ARG_SHIFT};
 }
 
 ByteCode* Function::ByteCodeAt(Integer index) const {
@@ -490,6 +583,20 @@ Value* Function::ConstantAt(Integer index) const {
 
 Integer Function::GetArity() const {
     return this->arity;
+}
+
+bool Value::IsTruthy() const {
+    switch (this->GetType()) {
+        case ValueType::Boolean: {
+            return static_cast<bool>(this->as.integer.Unwrap());
+        }
+        case ValueType::Nil: {
+            return false;
+        }
+        default: {
+            return true;
+        }
+    }
 }
 
 void Value::Copy(Runtime* rt, Value* other) {
@@ -613,6 +720,10 @@ void Value::AssertType(Runtime* rt, ValueType expected) const {
 
 void CallFrame::AdvanceProgramCounter() {
     this->programCounter = Integer{this->programCounter.Unwrap() + 1};
+}
+
+void CallFrame::SetProgramCounter(Integer newPc) {
+    this->programCounter = newPc;
 }
 
 Integer CallFrame::ProgramCounter() const {
@@ -762,36 +873,9 @@ void Function::SetStack(Integer arity, Integer localCount) {
 }
 
 void ByteCode::Init(Runtime* rt, uint32_t val) {
-    uint32_t op = val & OP_BITS;
-    uint16_t arg1 = (val & ARG1_BITS) >> ARG_BITS_COUNT;
-    uint16_t arg2 = val & ARG2_BITS;
+    (void)(rt);
 
-    this->argument1 = Integer{arg1};
-    this->argument2 = Integer{arg2};
-
-    switch (op) {
-        case OP_LOAD_CONSTANT: {
-            this->type = ByteCodeType::LoadConstant;
-            return;
-        }
-        case OP_LOAD_GLOBAL: {
-            this->type = ByteCodeType::LoadGlobal;
-            return;
-        }
-        case OP_INVOKE: {
-            this->type = ByteCodeType::Invoke;
-            return;
-        }
-        case OP_RETURN: {
-            this->type = ByteCodeType::Return;
-            return;
-        }
-        default: {
-            rt->Local(Integer{0})->SetString(rt->NewString("Invalid ByteCode"));
-            rt->Throw(Integer{0});
-            return;
-        }
-    }
+    this->value = val;
 }
 
 

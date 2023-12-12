@@ -65,6 +65,8 @@ public:
     ThrowException& operator=(ThrowException&&) = default;
 
     const char* what() const noexcept override;
+
+    Integer GetAbsoluteStackIndex() const;
     
 private:
     Integer stackIndex;
@@ -89,6 +91,9 @@ public:
 
     Integer ProgramCounter() const;
     void AdvanceProgramCounter();
+    void SetProgramCounter(Integer pc);
+
+    Integer Size() const;
 
 private:
     Integer stackBase{0};
@@ -145,12 +150,45 @@ enum class ValueType {
     Map,
 };
 
+namespace bits {
+    static constexpr uint32_t ARG1_SHIFT       = 16;
+    static constexpr uint32_t ARG2_SHIFT       = 8;
+    static constexpr uint32_t ARG3_SHIFT       = 0;
+    static constexpr uint32_t LARGE_ARG_SHIFT  = 0;
+    static constexpr uint32_t OP_BITS          = 0b11111111000000000000000000000000;
+    static constexpr uint32_t ARG1_BITS        = 0b00000000111111110000000000000000;
+    static constexpr uint32_t ARG2_BITS        = 0b00000000000000001111111100000000;
+    static constexpr uint32_t ARG3_BITS        = 0b00000000000000000000000011111111;
+    static constexpr uint32_t LARGE_ARG_BITS   = 0b00000000000000001111111111111111;
+    static constexpr uint32_t OP_LOAD_CONSTANT = 0b00000000000000000000000000000000;
+    static constexpr uint32_t OP_LOAD_GLOBAL   = 0b00000001000000000000000000000000;
+    static constexpr uint32_t OP_INVOKE        = 0b00000010000000000000000000000000;
+    static constexpr uint32_t OP_RETURN        = 0b00000011000000000000000000000000;
+    static constexpr uint32_t OP_COPY          = 0b00000100000000000000000000000000;
+    static constexpr uint32_t OP_EQUAL         = 0b00000101000000000000000000000000;
+    static constexpr uint32_t OP_LT            = 0b00000110000000000000000000000000;
+    static constexpr uint32_t OP_LTE           = 0b00000111000000000000000000000000;
+    static constexpr uint32_t OP_GT            = 0b00001000000000000000000000000000;
+    static constexpr uint32_t OP_GTE           = 0b00001001000000000000000000000000;
+    static constexpr uint32_t OP_ADD           = 0b00001010000000000000000000000000;
+    static constexpr uint32_t OP_SUB           = 0b00001011000000000000000000000000;
+    static constexpr uint32_t OP_MULT          = 0b00001100000000000000000000000000;
+    static constexpr uint32_t OP_DIV           = 0b00001101000000000000000000000000;
+    static constexpr uint32_t OP_NOOP          = 0b00001110000000000000000000000000;
+    static constexpr uint32_t OP_JUMPF         = 0b00001111000000000000000000000000;
+}
+
 enum class ByteCodeType {
-    NoOp,
-    Return,
-    LoadConstant,
-    LoadGlobal,
-    Invoke,
+    NoOp = bits::OP_NOOP,
+    Return = bits::OP_RETURN,
+    LoadConstant = bits::OP_LOAD_CONSTANT,
+    LoadGlobal = bits::OP_LOAD_GLOBAL,
+    Invoke = bits::OP_INVOKE,
+    Copy = bits::OP_COPY,
+    Equal = bits::OP_EQUAL,
+    Subtract = bits::OP_SUB,
+    Multiply = bits::OP_MULT,
+    JumpIfFalse = bits::OP_JUMPF,
 };
 
 class ByteCode {
@@ -166,27 +204,16 @@ public:
 
     ByteCodeType Type() const;
 
-    Integer Argument1() const;
-    Integer Argument2() const;
+    Integer SmallArgument1() const;
+    Integer SmallArgument2() const;
+    Integer SmallArgument3() const;
+    Integer LargeArgument() const;
 
     void Init(Runtime* rt, uint32_t value);
 
 private:
-
-    static constexpr uint32_t ARG_BITS_COUNT   = 12;
-    static constexpr uint32_t OP_BITS          = 0b11111111000000000000000000000000;
-    static constexpr uint32_t ARG1_BITS        = 0b00000000111111111111000000000000;
-    static constexpr uint32_t ARG2_BITS        = 0b00000000000000000000111111111111;
-    static constexpr uint32_t OP_LOAD_CONSTANT = 0b00000001000000000000000000000000;
-    static constexpr uint32_t OP_LOAD_GLOBAL   = 0b00000010000000000000000000000000;
-    static constexpr uint32_t OP_INVOKE        = 0b00000011000000000000000000000000;
-    static constexpr uint32_t OP_RETURN        = 0b00000100000000000000000000000000;
-
-    ByteCodeType type{ByteCodeType::NoOp};
-    Integer argument1{0};
-    Integer argument2{0};
+    uint32_t value;
 };
-
 
 class NativeFunction;
 class Function;
@@ -212,6 +239,8 @@ public:
     void SetNativeFunction(NativeFunction* value);
     void SetBoolean(bool value);
     void SetMap(Map* val);
+
+    bool IsTruthy() const;
 
     bool Equals(Runtime* rt, Value* other) const;
 
@@ -400,7 +429,7 @@ public:
     Runtime(const Runtime&) = delete;
     Runtime& operator=(const Runtime&) = delete;
 
-    Runtime(Runtime*&) = delete;
+    Runtime(Runtime&&) = delete;
     Runtime& operator=(Runtime&&) = delete;
 
     void Invoke(Integer base, Integer argumentCount);
@@ -435,6 +464,12 @@ public:
 
     void Return(Integer sourceIndex);
 
+    void Multiply(Integer dest, Integer arg1, Integer arg2);
+    
+    void Subtract(Integer dest, Integer arg1, Integer arg2);
+
+    void Equal(Integer dest, Integer arg1, Integer arg2);
+
     template<typename T>
     T* New(Integer length);
 
@@ -451,6 +486,25 @@ private:
     Vector<Value> stack;
     Map* globals{nullptr};
     Object* heap{nullptr};
+};
+
+class RuntimeDefer {
+public:
+    using Handle = void (*)(Runtime*);
+
+    RuntimeDefer(Runtime* rt, Handle fn);
+
+    ~RuntimeDefer();
+
+    RuntimeDefer(const RuntimeDefer&) = delete;
+    RuntimeDefer& operator=(const RuntimeDefer&) = delete;
+
+    RuntimeDefer(RuntimeDefer&) = delete;
+    RuntimeDefer& operator=(RuntimeDefer&&) = delete;
+
+private:
+    Runtime* runtime;
+    Handle handle;
 };
 
 }

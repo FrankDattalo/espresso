@@ -1,0 +1,39 @@
+arity 1
+
+loadc %R1 #C function
+    arity 2
+
+    loadc %R2 #C integer 0
+    equal %R2 %R1 %R2
+    jumpf %R2 @recurse
+
+    loadc %R1 #C integer 1
+    return %R1
+
+    label @recurse
+
+    loadc %R3 #C integer 1
+    sub %R3 %R1 %R3
+    copy %R2 %R0
+    invoke %R2 2
+
+    // return from recursion
+    mult %R1 %R1 %R2
+
+    return %R1
+
+
+    locals #R
+end
+
+loadc %R2 #C integer 5
+
+invoke %R1 2
+
+copy %R2 %R1
+loadc %R1 #C string "print"
+loadg %R1 %R1
+invoke %R1 2
+return %R1
+
+locals #R

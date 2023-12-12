@@ -16,9 +16,12 @@ Espresso::~Espresso() {
     system->ReAllocate(rt, sizeof(Runtime), 0);
 }
 
-void Espresso::Invoke(std::int64_t base, std::int64_t argumentCount) {
+void Espresso::Load(const char* name) {
     Runtime* rt = static_cast<Runtime*>(this->impl);
-    rt->Invoke(Integer{base}, Integer{argumentCount});
+    rt->Local(Integer{0})->SetString(rt->NewString("load"));
+    rt->LoadGlobal(Integer{0}, Integer{0});
+    rt->Local(Integer{1})->SetString(rt->NewString(name));
+    rt->Invoke(Integer{0}, Integer{2});
 }
 
 }

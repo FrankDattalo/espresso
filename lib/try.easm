@@ -1,0 +1,21 @@
+
+arity 1
+
+loadc %R1 #C string "try"
+loadg %R1 %R1
+
+loadc %R2 #C function
+    arity 1
+
+    loadc %R1 #C string "throw"
+    loadg %R1 %R1
+    loadc %R2 #C string "hi"
+    invoke %R1 2
+
+    locals #R
+end
+
+invoke %R1 2
+return %R1
+
+locals #R

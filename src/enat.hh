@@ -8,8 +8,6 @@ namespace native {
 
 void RegisterNatives(Runtime* rt);
 
-void Entrypoint(Runtime* rt);
-
 }
 
 }

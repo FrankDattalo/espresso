@@ -25,6 +25,9 @@ OP_MULT          = 0b0000_1100_0000_0000_0000_0000_0000_0000
 OP_DIV           = 0b0000_1101_0000_0000_0000_0000_0000_0000
 OP_NOOP          = 0b0000_1110_0000_0000_0000_0000_0000_0000
 OP_JUMPF         = 0b0000_1111_0000_0000_0000_0000_0000_0000
+OP_JUMP          = 0b0001_0000_0000_0000_0000_0000_0000_0000
+OP_STORE_G       = 0b0001_0001_0000_0000_0000_0000_0000_0000
+OP_NOT           = 0b0001_0010_0000_0000_0000_0000_0000_0000
 
 # Constant structure -
 # [Tag - 8 bits, Variable length depending on tag ...]
@@ -103,9 +106,9 @@ def main():
 
     def next_register():
         reg = next()
-        if not reg.startswith('%R'):
+        if not reg.startswith('R'):
             raise Exception(f'Invalid register: {reg}')
-        res = int(reg[len('%R'):])
+        res = int(reg[len('R'):])
         if res < 0:
             raise Exception(f'Invalid register: {reg}')
         
@@ -206,18 +209,29 @@ def main():
             _, reg, label = opcode
             location = resolve_label(label)
             return OP_JUMPF | Arg1(reg) | LargeArg(location)
+        elif opcode[0] == 'jump':
+            _, label = opcode
+            location = resolve_label(label)
+            return OP_JUMP | LargeArg(location)
         else:
             raise Exception(f'Invalid opcode to patch: {opcode}')
 
+    def patch_function(func):
+        func['opcodes'] = [patch(func, opcode) for opcode in func['opcodes']]
+
     def endfunction():
         func = assembler['contexts'][-1]
-        func['opcodes'] = [patch(func, opcode) for opcode in func['opcodes']]
+        patch_function(func)
         assembler['contexts'].pop()
 
     def jump_if_false():
         reg = next_register()
         label = next_label()
         emit(('jumpf', reg, label))
+
+    def jump():
+        label = next_label()
+        emit(('jump', label))
 
     def label():
         label = next_label()
@@ -242,6 +256,16 @@ def main():
         source2 = next_register()
         emit(OP_MULT  | Arg1(dest) | Arg2(source1) | Arg3(source2))
 
+    def store_global():
+        key = next_register()
+        value = next_register()
+        emit(OP_STORE_G | Arg1(key) | Arg2(value))
+
+    def op_not():
+        dest = next_register()
+        source = next_register()
+        emit(OP_NOT | Arg1(dest) | Arg2(source))
+
     handlers = {
         'arity': arity,
         'locals': set_locals,
@@ -257,11 +281,14 @@ def main():
         'integer': integer,
         'equal': equal,
         'jumpf': jump_if_false,
+        'jump': jump,
         'label': label,
         'sub': sub,
         'add': add,
         'mult': mult,
         'float': op_float,
+        'storeg': store_global,
+        'not': op_not,
     }
 
     while assembler['index'] < len(assembler['source']):
@@ -304,7 +331,14 @@ def main():
         for constant in func['constants']:
             write_constant(constant)
 
-    write_function(assembler['contexts'][0])
+    try:
+        patch_function(assembler['contexts'][0])
+        write_function(assembler['contexts'][0])
+
+    except Exception as e:
+        sys.stderr.write(pprint.pformat(e) + '\n')
+        sys.stderr.write(pprint.pformat(assembler) + '\n')
+        raise e
 
     sys.stdout.buffer.write(assembler['output'])
 

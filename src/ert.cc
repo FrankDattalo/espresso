@@ -401,8 +401,26 @@ void Runtime::Interpret() {
                 }
                 break;
             }
+            case ByteCodeType::Not: {
+                CurrentFrame()->AdvanceProgramCounter();
+                Integer dest = byteCode->SmallArgument1();
+                Integer source = byteCode->SmallArgument2();
+                this->Not(dest, source);
+                break;
+            }
+            case ByteCodeType::Jump: {
+                CurrentFrame()->SetProgramCounter(byteCode->LargeArgument());
+                break;
+            }
+            case ByteCodeType::StoreGlobal: {
+                CurrentFrame()->AdvanceProgramCounter();
+                Integer key = byteCode->SmallArgument1();
+                Integer value = byteCode->SmallArgument2();
+                this->StoreGlobal(key, value);
+                break;
+            }
             default: {
-                Panic("Unknown ByteCode");
+                Panic("Unknown ByteCode in Interpret");
                 break;
             }
         }
@@ -434,6 +452,10 @@ void Runtime::Copy(Integer destIndex, Integer sourceIndex) {
 
 void Runtime::Equal(Integer dest, Integer arg1, Integer arg2) {
     Local(dest)->SetBoolean(Local(arg1)->Equals(this, Local(arg2)));
+}
+
+void Runtime::Not(Integer dest, Integer source) {
+    Local(dest)->SetBoolean(!Local(source)->GetBoolean(this));
 }
 
 void Runtime::Add(Integer dest, Integer arg1, Integer arg2) {
@@ -755,6 +777,15 @@ Integer CallFrame::ProgramCounter() const {
     return this->programCounter;
 }
 
+void Runtime::StoreGlobal(Integer keyIndex, Integer valueIndex) {
+    Value* key = Local(keyIndex);
+    Value* value = Local(valueIndex);
+
+    key->AssertType(this, ValueType::String);
+
+    this->globals->Put(this, key, value);
+}
+
 void Runtime::LoadGlobal(Integer destIndex, Integer keyIndex) {
     Value* dest = Local(destIndex);
     Value* key = Local(keyIndex);
@@ -958,6 +989,14 @@ void ByteCode::Verify(Runtime* rt, const Function* fn) const {
     std::int64_t localCount = fn->GetLocalCount().Unwrap();
     std::int64_t byteCodeCount = fn->GetByteCodeCount().Unwrap();
 
+    auto validateProgramCounter = [&](Integer val, const char* message) {
+        std::int64_t newPc = val.Unwrap();
+        if (newPc < 0 || newPc >= byteCodeCount) {
+            rt->Local(Integer{0})->SetString(rt->NewString(message));
+            rt->Throw(Integer{0});
+        }
+    };
+
     auto validateRegisterIsReadable = [&](Integer registerArg, const char* message) {
         std::int64_t regArg = registerArg.Unwrap();
         if (regArg >= localCount || regArg < 0) {
@@ -1048,11 +1087,21 @@ void ByteCode::Verify(Runtime* rt, const Function* fn) const {
         }
         case ByteCodeType::JumpIfFalse: {
             validateRegisterIsReadable(this->SmallArgument1(), "Invalid readable register for JumpIfFalse");
-            std::int64_t newPc = this->LargeArgument().Unwrap();
-            if (newPc < 0 || newPc >= byteCodeCount) {
-                rt->Local(Integer{0})->SetString(rt->NewString("Invalid program counter for JumpIfFalse"));
-                rt->Throw(Integer{0});
-            }
+            validateProgramCounter(this->LargeArgument(), "Invalid program counter for JumpIfFalse");
+            break;
+        }
+        case ByteCodeType::Not: {
+            validateRegisterIsWritable(this->SmallArgument1(), "Invalid writable register for Not");
+            validateRegisterIsReadable(this->SmallArgument2(), "Invalid readable register for Not");
+            break;
+        }
+        case ByteCodeType::Jump: {
+            validateProgramCounter(this->LargeArgument(), "Invalid program counter for Jump");
+            break;
+        }
+        case ByteCodeType::StoreGlobal: {
+            validateRegisterIsWritable(this->SmallArgument1(), "Invalid readable register 1 for StoreGlobal");
+            validateRegisterIsReadable(this->SmallArgument2(), "Invalid readable register 2 for StoreGlobal");
             break;
         }
         default: {

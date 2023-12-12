@@ -176,6 +176,9 @@ namespace bits {
     static constexpr uint32_t OP_DIV           = 0b00001101000000000000000000000000;
     static constexpr uint32_t OP_NOOP          = 0b00001110000000000000000000000000;
     static constexpr uint32_t OP_JUMPF         = 0b00001111000000000000000000000000;
+    static constexpr uint32_t OP_JUMP          = 0b00010000000000000000000000000000;
+    static constexpr uint32_t OP_STORE_G       = 0b00010001000000000000000000000000;
+    static constexpr uint32_t OP_NOT           = 0b00010010000000000000000000000000;
 }
 
 enum class ByteCodeType {
@@ -190,6 +193,9 @@ enum class ByteCodeType {
     Subtract = bits::OP_SUB,
     Multiply = bits::OP_MULT,
     JumpIfFalse = bits::OP_JUMPF,
+    Jump = bits::OP_JUMP,
+    StoreGlobal = bits::OP_STORE_G,
+    Not = bits::OP_NOT,
 };
 
 class NativeFunction;
@@ -480,6 +486,10 @@ public:
     
     void Add(Integer dest, Integer arg1, Integer arg2);
     void Subtract(Integer dest, Integer arg1, Integer arg2);
+
+    void Not(Integer dest, Integer src);
+
+    void StoreGlobal(Integer keyReg, Integer valueReg);
 
     void Equal(Integer dest, Integer arg1, Integer arg2);
 

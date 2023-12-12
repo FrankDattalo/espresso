@@ -1,9 +1,9 @@
 arity 1
 
-loadc %R1 #C string "print"
-loadg %R1 %R1
-loadc %R2 #C string "Hello, World!"
-invoke %R1 2
-return %R1
+loadc R1 #C string "print"
+loadg R1 R1
+loadc R2 #C string "Hello, World!"
+invoke R1 2
+return R1
 
 locals #R

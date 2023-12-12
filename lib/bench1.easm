@@ -1,0 +1,71 @@
+
+arity 1
+
+label @begin
+
+    loadc R1 #C string "factorial"
+
+    // factorial definition
+    loadc R2 #C function
+        arity 2
+
+        loadc R2 #C integer 0
+        equal R2 R1 R2
+        jumpf R2 @recurse
+
+        loadc R1 #C integer 1
+        return R1
+
+        label @recurse
+
+        loadc R3 #C integer 1
+        sub R3 R1 R3
+        copy R2 R0
+        invoke R2 2
+
+        // return from recursion
+        mult R1 R1 R2
+
+        return R1
+
+        locals #R
+    end
+
+    storeg R1 R2
+
+    // outer iteration number
+    loadc R1 #C integer 0
+
+label @outerstart
+
+    // inner iteration number
+    loadc R2 #C integer 0
+
+label @start
+
+    loadc R3 #C integer 1000000
+    equal R3 R2 R3
+    not R3 R3
+    jumpf R3 @end
+
+    loadc R3 #C string "factorial"
+    loadg R3 R3
+    loadc R4 #C integer 8
+    invoke R3 2
+
+    loadc R3 #C integer 1
+    add R2 R2 R3
+
+    jump @start
+
+label @end
+    loadc R3 #C integer 1
+    add R1 R1 R3
+    loadc R3 #C integer 100
+    equal R3 R1 R3
+    jumpf R3 @outerstart
+
+    loadc R1 #C nil
+    return R1
+
+locals #R

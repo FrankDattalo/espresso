@@ -1,4 +1,4 @@
 arity 1
 locals 1
 
-return %R5
+return R5

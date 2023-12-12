@@ -38,6 +38,9 @@ static constexpr Entry ENTRIES[] = {
     {"readByteCode", 2, 3, [](Runtime* rt) {
         espresso::bytecode::Load(rt);
     }},
+    {"verifyByteCode", 2, 4, [](Runtime* rt) {
+        espresso::bytecode::Verify(rt);
+    }},
     {"print", 2, 2, [](Runtime* rt) {
         Value* toPrint = rt->Local(Integer{1});
         Print(rt, toPrint);
@@ -73,6 +76,11 @@ static constexpr Entry ENTRIES[] = {
         rt->LoadGlobal(Integer{0}, Integer{0});
         rt->Invoke(Integer{0}, Integer{2});
 
+        rt->Copy(Integer{1}, Integer{0});
+        rt->Local(Integer{0})->SetString(rt->NewString("verifyByteCode"));
+        rt->LoadGlobal(Integer{0}, Integer{0});
+        rt->Invoke(Integer{0}, Integer{2});
+
         // local 0 contains bytecode
         rt->Invoke(Integer{0}, Integer{1});
         // invoke the bytecode
@@ -92,6 +100,9 @@ void RegisterNatives(Runtime* rt) {
                 Integer{entry.arity}, Integer{entry.localCount}, entry.handle));
 
         rt->DefineGlobal(Integer{0}, Integer{1});
+
+        // sanity check
+        rt->Local(Integer{1})->GetNativeFunction(rt)->Verify(rt);
     }
 
     rt->Local(Integer{0})->SetNil();

@@ -553,6 +553,14 @@ Integer Function::GetLocalCount() const {
     return this->localCount;
 }
 
+Integer Function::GetConstantCount() const {
+    return this->constants.Length();
+}
+
+Integer Function::GetByteCodeCount() const {
+    return this->byteCode.Length();
+}
+
 ByteCodeType ByteCode::Type() const {
     return static_cast<ByteCodeType>(this->value & bits::OP_BITS);
 }
@@ -881,6 +889,169 @@ void ByteCode::Init(Runtime* rt, uint32_t val) {
 
 const char* String::RawPointer() const {
     return this->data.RawHeadPointer();
+}
+
+void Function::Verify(Runtime* rt) const {
+    if (this->arity.Unwrap() > this->localCount.Unwrap()) {
+        rt->Local(Integer{0})->SetString(rt->NewString("Invalid arity for function. Must be <= localCount"));
+        rt->Throw(Integer{0});
+    }
+
+    if (this->arity.Unwrap() <= 0) {
+        rt->Local(Integer{0})->SetString(rt->NewString("Invalid arity for function. Must be >= 1"));
+        rt->Throw(Integer{0});
+    }
+
+    if (this->localCount.Unwrap() <= 0) {
+        rt->Local(Integer{0})->SetString(rt->NewString("Invalid localCount for function. Must be >= 1"));
+        rt->Throw(Integer{0});
+    }
+
+    std::int64_t byteCodeCount = this->byteCode.Length().Unwrap();
+    for (std::int64_t i = 0; i < byteCodeCount; i++) {
+        ByteCode* bc = this->ByteCodeAt(Integer{i});
+        bc->Verify(rt, this);
+    }
+
+    std::int64_t constantCount = this->constants.Length().Unwrap();
+    for (std::int64_t i = 0; i < constantCount; i++) {
+        Value* value = this->ConstantAt(Integer{i});
+        switch (value->GetType()) {
+            case ValueType::Function: {
+                value->GetFunction(rt)->Verify(rt);
+                break;
+            }
+            case ValueType::NativeFunction: {
+                value->GetNativeFunction(rt)->Verify(rt);
+                break;
+            }
+            default: {
+                break;
+            }
+        }
+    }
+}
+
+void ByteCode::Verify(Runtime* rt, const Function* fn) const {
+
+
+    std::int64_t constantCount = fn->GetConstantCount().Unwrap();
+    std::int64_t localCount = fn->GetLocalCount().Unwrap();
+    std::int64_t byteCodeCount = fn->GetByteCodeCount().Unwrap();
+
+    auto validateRegisterIsReadable = [&](Integer registerArg, const char* message) {
+        std::int64_t regArg = registerArg.Unwrap();
+        if (regArg >= localCount || regArg < 0) {
+            rt->Local(Integer{0})->SetString(rt->NewString(message));
+            rt->Throw(Integer{0});
+        }
+    };
+
+    auto validateRegisterIsWritable = [&](Integer registerArg, const char* message) {
+        std::int64_t regArg = registerArg.Unwrap();
+        if (regArg >= localCount || regArg <= 0) {
+            rt->Local(Integer{0})->SetString(rt->NewString(message));
+            rt->Throw(Integer{0});
+        }
+    };
+
+    auto validateConstantIsReadable = [&](Integer constantArg, const char* message) {
+        std::int64_t constArg = constantArg.Unwrap();
+        if (constArg >= constantCount) {
+            rt->Local(Integer{0})->SetString(rt->NewString(message));
+            rt->Throw(Integer{0});
+        }
+    };
+
+    // auto validateConstantIsType = [&](Integer constantArg, ValueType expected, const char* message) {
+    //     ValueType actualType = fn->ConstantAt(constantArg)->GetType();
+    //     if (actualType != expected) {
+    //         rt->Local(Integer{0})->SetString(rt->NewString(message));
+    //         rt->Throw(Integer{0});
+    //     }
+    // };
+
+    switch (this->Type()) {
+        case ByteCodeType::NoOp: {
+            break;
+        }
+        case ByteCodeType::Return: {
+            validateRegisterIsReadable(this->SmallArgument1(), "Invalid readable register for Return instruction");
+            break;
+        }
+        case ByteCodeType::LoadConstant: {
+            validateRegisterIsWritable(this->SmallArgument1(), "Invalid writable register for LoadConstant");
+            validateConstantIsReadable(this->LargeArgument(), "Invalid constant for LoadConstant");
+            break;
+        }
+        case ByteCodeType::LoadGlobal: {
+            validateRegisterIsWritable(this->SmallArgument1(), "Invalid writable register for LoadGlobal");
+            validateRegisterIsReadable(this->SmallArgument2(), "Invalid readable register for LoadGlobal");
+            break;
+        }
+        case ByteCodeType::Invoke: {
+            validateRegisterIsWritable(this->SmallArgument1(), "Invalid writable register for Invoke");
+            std::int64_t argCount = this->SmallArgument2().Unwrap();
+            if (argCount <= 0) {
+                rt->Local(Integer{0})->SetString(rt->NewString("Invalid argumentCount in Invoke"));
+                rt->Throw(Integer{0});
+            }
+            break;
+        }
+        case ByteCodeType::Copy: {
+            validateRegisterIsWritable(this->SmallArgument1(), "Invalid writable register for Copy");
+            validateRegisterIsReadable(this->SmallArgument2(), "Invalid readable register for Copy");
+            break;
+        }
+        case ByteCodeType::Equal: {
+            validateRegisterIsWritable(this->SmallArgument1(), "Invalid writable register for Equal");
+            validateRegisterIsReadable(this->SmallArgument2(), "Invalid readable register 1 for Equal");
+            validateRegisterIsReadable(this->SmallArgument3(), "Invalid readable register 2 for Equal");
+            break;
+        }
+        case ByteCodeType::Subtract: {
+            validateRegisterIsWritable(this->SmallArgument1(), "Invalid writable register for Subtract");
+            validateRegisterIsReadable(this->SmallArgument2(), "Invalid readable register 1 for Subtract");
+            validateRegisterIsReadable(this->SmallArgument3(), "Invalid readable register 2 for Subtract");
+            break;
+        }
+        case ByteCodeType::Multiply: {
+            validateRegisterIsWritable(this->SmallArgument1(), "Invalid writable register for Multiply");
+            validateRegisterIsReadable(this->SmallArgument2(), "Invalid readable register 1 for Multiply");
+            validateRegisterIsReadable(this->SmallArgument3(), "Invalid readable register 2 for Multiply");
+            break;
+        }
+        case ByteCodeType::JumpIfFalse: {
+            validateRegisterIsReadable(this->SmallArgument1(), "Invalid readable register for JumpIfFalse");
+            std::int64_t newPc = this->LargeArgument().Unwrap();
+            if (newPc < 0 || newPc >= byteCodeCount) {
+                rt->Local(Integer{0})->SetString(rt->NewString("Invalid program counter for JumpIfFalse"));
+                rt->Throw(Integer{0});
+            }
+            break;
+        }
+        default: {
+            Panic("Unhandled bytecode in bytecode verifier");
+            return;
+        }
+    }
+}
+
+void NativeFunction::Verify(Runtime* rt) const {
+    if (this->arity.Unwrap() > this->localCount.Unwrap()) {
+        rt->Local(Integer{0})->SetString(rt->NewString("Invalid arity for nativefunction. Must be <= localCount"));
+        rt->Throw(Integer{0});
+    }
+
+    if (this->arity.Unwrap() <= 0) {
+        rt->Local(Integer{0})->SetString(rt->NewString("Invalid arity for nativefunction. Must be >= 1"));
+        rt->Throw(Integer{0});
+    }
+
+    if (this->localCount.Unwrap() <= 0) {
+        rt->Local(Integer{0})->SetString(rt->NewString("Invalid localCount for nativefunction. Must be >= 1"));
+        rt->Throw(Integer{0});
+    }
 }
 
 

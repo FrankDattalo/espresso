@@ -191,6 +191,11 @@ enum class ByteCodeType {
     JumpIfFalse = bits::OP_JUMPF,
 };
 
+class NativeFunction;
+class Function;
+class String;
+class Map;
+
 class ByteCode {
 public:
     ByteCode() = default;
@@ -210,15 +215,12 @@ public:
     Integer LargeArgument() const;
 
     void Init(Runtime* rt, uint32_t value);
+    
+    void Verify(Runtime* rt, const Function* fn) const;
 
 private:
     uint32_t value;
 };
-
-class NativeFunction;
-class Function;
-class String;
-class Map;
 
 class Value {
 public:
@@ -318,6 +320,10 @@ public:
 
     Integer GetLocalCount() const;
 
+    Integer GetConstantCount() const;
+
+    Integer GetByteCodeCount() const;
+
     void ReserveByteCode(Runtime* rt, Integer capacity);
 
     void ReserveConstants(Runtime* rt, Integer capacity);
@@ -325,6 +331,8 @@ public:
     ByteCode* PushByteCode(Runtime* rt);
 
     Value* PushConstant(Runtime* rt);
+
+    void Verify(Runtime* rt) const;
 
 private:
     Integer arity{0};
@@ -353,6 +361,8 @@ public:
     Integer GetLocalCount() const;
 
     Handle GetHandle() const;
+
+    void Verify(Runtime* rt) const;
 
 private:
     Integer arity{0};

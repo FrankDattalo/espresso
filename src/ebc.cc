@@ -145,6 +145,12 @@ void Load(Runtime* rt) {
     reader.readFunction(rt, dest);
 }
 
+void Verify(Runtime* rt) {
+    Function* fn = rt->Local(Integer{1})->GetFunction(rt);
+    fn->Verify(rt);
+    rt->Copy(Integer{0}, Integer{1});
+}
+
 } // bytecode
 
 } // espresso

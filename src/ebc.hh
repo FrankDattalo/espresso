@@ -8,6 +8,8 @@ namespace bytecode {
 
 void Load(Runtime* rt);
 
+void Verify(Runtime* rt);
+
 } // bytecode
 
 } // espresso

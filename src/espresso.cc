@@ -31,7 +31,7 @@ int Espresso::Load(const char* name) {
         rt->Local(Integer{1})->SetString(rt->NewString("ERROR Uncaught Exception:"));
         rt->LoadGlobal(Integer{0}, Integer{0});
         rt->Invoke(Integer{0}, Integer{2});
-        
+
         rt->Local(Integer{0})->SetString(rt->NewString("print"));
         rt->Copy(Integer{1}, Integer{2});
         rt->LoadGlobal(Integer{0}, Integer{0});

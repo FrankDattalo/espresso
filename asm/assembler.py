@@ -112,11 +112,11 @@ def main():
         res = int(reg[len('R'):])
         if res < 0:
             raise Exception(f'Invalid register: {reg}')
-        
+
         assembler['contexts'][-1]['max_register'] = max(
             res, assembler['contexts'][-1]['max_register'])
 
-        return res 
+        return res
 
     def next_int():
         n = next()

@@ -30,7 +30,7 @@ void Runtime::Init(System* system) {
     this->globals = nullptr;
     this->bytesAllocated = Integer{0};
     this->nextGc = Integer{128};
-    
+
     this->stack.Init(this);
     this->frames.Init(this);
 
@@ -52,7 +52,7 @@ void Runtime::Init(System* system) {
 void Runtime::DeInit() {
     this->stack.DeInit(this);
     this->frames.DeInit(this);
-    
+
     Object* curr = this->heap;
     while (curr != nullptr) {
         Object* toDeInit = curr;
@@ -1358,7 +1358,7 @@ void Runtime::Sweep() {
 
 
         Object* next = obj->GetNext();
-        
+
         // 1. start of heap
         if (obj == this->heap) {
             // std::printf("[GC] Free(front) %p\n", (void*) obj);
@@ -1401,7 +1401,7 @@ void Runtime::Gc() {
         CallFrame* frame = this->frames.At(Integer{i});
 
         // std::printf("[GC] Marking Frame %lld [%lld, %lld)\n", i,
-        //     frame->AbsoluteIndex(Integer{0}).Unwrap(), 
+        //     frame->AbsoluteIndex(Integer{0}).Unwrap(),
         //     frame->AbsoluteIndex(frame->Size()).Unwrap());
 
         std::int64_t frameSize = frame->Size().Unwrap();
@@ -1411,7 +1411,7 @@ void Runtime::Gc() {
             this->Mark(val);
         }
     }
-    
+
     // std::printf("[GC] Done Marking Frames\n");
 
     this->Sweep();

@@ -67,7 +67,7 @@ public:
     const char* what() const noexcept override;
 
     Integer GetAbsoluteStackIndex() const;
-    
+
 private:
     Integer stackIndex;
 };
@@ -232,7 +232,7 @@ public:
     Integer LargeArgument() const;
 
     void Init(Runtime* rt, uint32_t value);
-    
+
     void Verify(Runtime* rt, const Function* fn) const;
 
 private:
@@ -525,7 +525,7 @@ public:
 
     void Multiply(Integer dest, Integer arg1, Integer arg2);
     void Divide(Integer dest, Integer arg1, Integer arg2);
-    
+
     void Add(Integer dest, Integer arg1, Integer arg2);
     void Subtract(Integer dest, Integer arg1, Integer arg2);
 

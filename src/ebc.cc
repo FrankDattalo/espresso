@@ -62,24 +62,24 @@ struct BytecodeReader {
         uint16_t constantType = readU8(rt);
         switch (constantType) {
             // nil
-            case 0: {
+            case bits::CONST_NIL: {
                 dest->SetNil();
                 break;
             }
             // int
-            case 1: {
+            case bits::CONST_INT: {
                 int64_t integer = readI64(rt);
                 dest->SetInteger(Integer{integer});
                 break;
             }
             // real
-            case 2: {
+            case bits::CONST_REAL: {
                 double real = readF64(rt);
                 dest->SetDouble(Double{real});
                 break;
             }
             // string
-            case 3: {
+            case bits::CONST_STRING: {
                 rt->Local(Integer{2})->SetString(rt->NewString(""));
                 String* str = rt->Local(Integer{2})->GetString(rt);
                 dest->SetString(str);
@@ -93,17 +93,22 @@ struct BytecodeReader {
                 break;
             }
             // boolean
-            case 4: {
+            case bits::CONST_BOOL: {
                 uint8_t val = readU8(rt);
                 dest->SetBoolean(static_cast<bool>(val));
                 break;
             }
             // function
-            case 5: {
+            case bits::CONST_FUNC: {
                 rt->Local(Integer{2})->SetFunction(rt->NewFunction());
                 Function* fn = rt->Local(Integer{2})->GetFunction(rt);
                 dest->SetFunction(fn);
                 readFunction(rt, fn);
+                break;
+            }
+            // map
+            case bits::CONST_MAP: {
+                dest->SetMap(rt->NewMap());
                 break;
             }
             default: {

@@ -197,6 +197,7 @@ static void DoPrint(Runtime* rt, Value* val, Printed* printed, bool display) {
                 DoPrint(rt, iter.Key(), printed, true);
                 system->Write(out, " = ", 3);
                 DoPrint(rt, iter.Value(), printed, true);
+                first = false;
             }
 
             system->Write(out, "}", 1);

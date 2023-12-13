@@ -151,6 +151,13 @@ enum class ValueType {
 };
 
 namespace bits {
+    static constexpr uint8_t  CONST_NIL    = 0b00000000;
+    static constexpr uint8_t  CONST_INT    = 0b00000001;
+    static constexpr uint8_t  CONST_REAL   = 0b00000010;
+    static constexpr uint8_t  CONST_STRING = 0b00000011;
+    static constexpr uint8_t  CONST_BOOL   = 0b00000100;
+    static constexpr uint8_t  CONST_FUNC   = 0b00000101;
+    static constexpr uint8_t  CONST_MAP    = 0b00000110;
     static constexpr uint32_t ARG1_SHIFT       = 16;
     static constexpr uint32_t ARG2_SHIFT       = 8;
     static constexpr uint32_t ARG3_SHIFT       = 0;
@@ -179,6 +186,7 @@ namespace bits {
     static constexpr uint32_t OP_JUMP          = 0b00010000000000000000000000000000;
     static constexpr uint32_t OP_STORE_G       = 0b00010001000000000000000000000000;
     static constexpr uint32_t OP_NOT           = 0b00010010000000000000000000000000;
+    static constexpr uint32_t OP_MAPSET        = 0b00010011000000000000000000000000;
 }
 
 enum class ByteCodeType {
@@ -196,6 +204,7 @@ enum class ByteCodeType {
     Jump = bits::OP_JUMP,
     StoreGlobal = bits::OP_STORE_G,
     Not = bits::OP_NOT,
+    MapSet = bits::OP_MAPSET,
 };
 
 class NativeFunction;
@@ -507,6 +516,8 @@ public:
     void StoreGlobal(Integer keyReg, Integer valueReg);
 
     void Equal(Integer dest, Integer arg1, Integer arg2);
+
+    void MapSet(Integer dest, Integer arg1, Integer arg2);
 
     template<typename T>
     T* New(Integer length);

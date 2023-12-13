@@ -359,6 +359,11 @@ void Runtime::Interpret() {
                 this->Copy(arg1, arg2);
                 break;
             }
+            case ByteCodeType::MapSet: {
+                CurrentFrame()->AdvanceProgramCounter();
+                this->MapSet(byteCode->SmallArgument1(), byteCode->SmallArgument2(), byteCode->SmallArgument3());
+                break;
+            }
             case ByteCodeType::Equal: {
                 CurrentFrame()->AdvanceProgramCounter();
                 Integer arg1 = byteCode->SmallArgument1();
@@ -452,6 +457,10 @@ void Runtime::Copy(Integer destIndex, Integer sourceIndex) {
 
 void Runtime::Equal(Integer dest, Integer arg1, Integer arg2) {
     Local(dest)->SetBoolean(Local(arg1)->Equals(this, Local(arg2)));
+}
+
+void Runtime::MapSet(Integer dest, Integer arg1, Integer arg2) {
+    Local(dest)->GetMap(this)->Put(this, Local(arg1), Local(arg2));
 }
 
 void Runtime::Not(Integer dest, Integer source) {
@@ -1087,6 +1096,12 @@ void ByteCode::Verify(Runtime* rt, const Function* fn) const {
             validateRegisterIsWritable(this->SmallArgument1(), "Invalid writable register for Equal");
             validateRegisterIsReadable(this->SmallArgument2(), "Invalid readable register 1 for Equal");
             validateRegisterIsReadable(this->SmallArgument3(), "Invalid readable register 2 for Equal");
+            break;
+        }
+        case ByteCodeType::MapSet: {
+            validateRegisterIsReadable(this->SmallArgument1(), "Invalid readable register 1 for MapSet");
+            validateRegisterIsReadable(this->SmallArgument2(), "Invalid readable register 2 for MapSet");
+            validateRegisterIsReadable(this->SmallArgument3(), "Invalid readable register 3 for MapSet");
             break;
         }
         case ByteCodeType::Add: {

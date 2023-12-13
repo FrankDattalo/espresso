@@ -28,6 +28,7 @@ OP_JUMPF         = 0b0000_1111_0000_0000_0000_0000_0000_0000
 OP_JUMP          = 0b0001_0000_0000_0000_0000_0000_0000_0000
 OP_STORE_G       = 0b0001_0001_0000_0000_0000_0000_0000_0000
 OP_NOT           = 0b0001_0010_0000_0000_0000_0000_0000_0000
+OP_MAPSET        = 0b0001_0011_0000_0000_0000_0000_0000_0000
 
 # Constant structure -
 # [Tag - 8 bits, Variable length depending on tag ...]
@@ -179,6 +180,12 @@ def main():
         source2 = next_register()
         emit(OP_EQUAL | Arg1(dest) | Arg2(source1) | Arg3(source2))
 
+    def mapset():
+        dest = next_register()
+        source1 = next_register()
+        source2 = next_register()
+        emit(OP_MAPSET | Arg1(dest) | Arg2(source1) | Arg3(source2))
+
     def string():
         val = next()
         val = val[1:-1]
@@ -186,6 +193,9 @@ def main():
 
     def nil():
         constant((CONST_NIL, None))
+
+    def op_map():
+        constant((CONST_MAP, None))
 
     def integer():
         val = next_int()
@@ -289,6 +299,8 @@ def main():
         'float': op_float,
         'storeg': store_global,
         'not': op_not,
+        'map': op_map,
+        'mapset': mapset,
     }
 
     while assembler['index'] < len(assembler['source']):
@@ -305,6 +317,8 @@ def main():
                 writeU8(ord(c))
         def write_nil(v):
             pass
+        def write_map(v):
+            pass
         def write_int(v):
             writeI64(v)
         def write_float(v):
@@ -315,6 +329,7 @@ def main():
             CONST_NIL: write_nil,
             CONST_INT: write_int,
             CONST_REAL: write_float,
+            CONST_MAP: write_map,
         }
         const_type, val = const
         writeU8(const_type[0])

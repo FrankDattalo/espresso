@@ -42,8 +42,8 @@ static constexpr Entry ENTRIES[] = {
         espresso::bytecode::Verify(rt);
     }},
     {"print", 2, 2, [](Runtime* rt) {
-        Value* toPrint = rt->Local(Integer{1});
-        Print(rt, toPrint);
+        rt->Local(Integer{0})->Copy(rt->Local(Integer{1}));
+        Print(rt, rt->Local(Integer{0}));
         rt->GetSystem()->Write(rt->GetSystem()->Stdout(), "\n", 1);
         rt->Local(Integer{0})->SetNil();
     }},
@@ -108,8 +108,24 @@ void RegisterNatives(Runtime* rt) {
     rt->Local(Integer{0})->SetNil();
 }
 
-void Print(Runtime* rt, Value* val) {
-    
+struct Printed {
+    Object* object;
+    Printed* next;
+
+    bool Contains(Object* obj) {
+        Printed* curr = this;
+        while (curr != nullptr) {
+            if (obj == curr->object) {
+                return true;
+            }
+            curr = curr->next;
+        }
+        return false;
+    }
+};
+
+static void DoPrint(Runtime* rt, Value* val, Printed* printed, bool display) {
+
     constexpr static size_t SPRINTF_BUFFER_SIZE = 66;
 
     System* system = rt->GetSystem();
@@ -136,18 +152,21 @@ void Print(Runtime* rt, Value* val) {
             system->Write(out, buffer, len);
             return;
         }
+        case ValueType::NativeFunction:
         case ValueType::Function: {
-            system->Write(out, "fn", 2);
-            return;
-        }
-        case ValueType::NativeFunction: {
-            system->Write(out, "fn", 2);
+            system->Write(out, "{fn}", 4);
             return;
         }
         case ValueType::String: {
             String* str = val->GetString(rt);
             // TODO: integer type conversion checking
+            if (display) {
+                system->Write(out, "\"", 1);
+            }
             system->Write(out, str->RawPointer(), str->Length().Unwrap());
+            if (display) {
+                system->Write(out, "\"", 1);
+            }
             return;
         }
         case ValueType::Boolean: {
@@ -157,10 +176,37 @@ void Print(Runtime* rt, Value* val) {
             return;
         }
         case ValueType::Map: {
-            system->Write(out, "TODO", 4);
+            Map* map = val->GetMap(rt);
+            if (printed != nullptr && printed->Contains(map)) {
+                const char* msg = "{recursive}";
+                system->Write(out, msg, std::strlen(msg));
+                return;
+            }
+
+            Printed newPrinted = Printed{map, printed};
+            printed = &newPrinted;
+
+            system->Write(out, "{", 1);
+
+            bool first = true;
+            Map::Iterator iter = map->GetIterator();
+            while (iter.HasNext()) {
+                if (!first) {
+                    system->Write(out, ", ", 2);
+                }
+                DoPrint(rt, iter.Key(), printed, true);
+                system->Write(out, " = ", 3);
+                DoPrint(rt, iter.Value(), printed, true);
+            }
+
+            system->Write(out, "}", 1);
             return;
         }
     }
+}
+
+void Print(Runtime* rt, Value* val) {
+    DoPrint(rt, val, nullptr, false);
 }
 
 } // native

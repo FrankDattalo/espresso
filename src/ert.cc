@@ -838,6 +838,28 @@ void Map::Init(Runtime* rt, Object* next) {
     this->entries.Init(rt);
 }
 
+Map::Iterator Map::GetIterator() const {
+    return Map::Iterator{this, -1};
+}
+
+Map::Iterator::Iterator(const Map* map, std::int64_t val) {
+    this->map = map;
+    this->next = val;
+}
+
+bool Map::Iterator::HasNext() {
+    this->next++;
+    return this->next < map->entries.Length().Unwrap();
+}
+
+Value* Map::Iterator::Key() {
+    return &this->map->entries.At(Integer{this->next})->key;
+}
+
+Value* Map::Iterator::Value() {
+    return &this->map->entries.At(Integer{this->next})->value;
+}
+
 bool Value::Equals(Runtime* rt, Value* other) const {
     if (this->GetType() != other->GetType()) {
         return false;

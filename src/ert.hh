@@ -425,6 +425,21 @@ public:
 
     void Put(Runtime* rt, Value* key, Value* value);
 
+    class Iterator {
+        public:
+            bool HasNext();
+            Value* Key();
+            Value* Value();
+        private:
+            friend class Map;
+            Iterator(const Map* map_, std::int64_t next_);
+
+            const Map* map;
+            std::int64_t next;
+    };
+
+    Iterator GetIterator() const;
+
 private:
     class Entry {
     friend class Map;

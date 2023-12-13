@@ -42,8 +42,7 @@ static constexpr Entry ENTRIES[] = {
         espresso::bytecode::Verify(rt);
     }},
     {"print", 2, 2, [](Runtime* rt) {
-        rt->Local(Integer{0})->Copy(rt->Local(Integer{1}));
-        Print(rt, rt->Local(Integer{0}));
+        Print(rt, rt->Local(Integer{1}));
         rt->GetSystem()->Write(rt->GetSystem()->Stdout(), "\n", 1);
         rt->Local(Integer{0})->SetNil();
     }},

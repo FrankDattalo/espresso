@@ -26,5 +26,6 @@ asm:
 	python3 ./asm/assembler.py < ./lib/doublemath.easm > ./lib/doublemath.bc
 	python3 ./asm/assembler.py < ./lib/bench1.easm > ./lib/bench1.bc
 	python3 ./asm/assembler.py < ./lib/recursiveprint.easm > ./lib/recursiveprint.bc
+	python3 ./asm/assembler.py < ./lib/gcbench.easm > ./lib/gcbench.bc
 
 .PHONY: test clean prepare build flex sourceStats asm

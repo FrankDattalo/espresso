@@ -151,13 +151,12 @@ enum class ValueType {
 };
 
 namespace bits {
-    static constexpr uint8_t  CONST_NIL    = 0b00000000;
-    static constexpr uint8_t  CONST_INT    = 0b00000001;
-    static constexpr uint8_t  CONST_REAL   = 0b00000010;
-    static constexpr uint8_t  CONST_STRING = 0b00000011;
-    static constexpr uint8_t  CONST_BOOL   = 0b00000100;
-    static constexpr uint8_t  CONST_FUNC   = 0b00000101;
-    static constexpr uint8_t  CONST_MAP    = 0b00000110;
+    static constexpr uint8_t  CONST_NIL        = 0b00000000;
+    static constexpr uint8_t  CONST_INT        = 0b00000001;
+    static constexpr uint8_t  CONST_REAL       = 0b00000010;
+    static constexpr uint8_t  CONST_STRING     = 0b00000011;
+    static constexpr uint8_t  CONST_BOOL       = 0b00000100;
+    static constexpr uint8_t  CONST_FUNC       = 0b00000101;
     static constexpr uint32_t ARG1_SHIFT       = 16;
     static constexpr uint32_t ARG2_SHIFT       = 8;
     static constexpr uint32_t ARG3_SHIFT       = 0;
@@ -187,6 +186,7 @@ namespace bits {
     static constexpr uint32_t OP_STORE_G       = 0b00010001000000000000000000000000;
     static constexpr uint32_t OP_NOT           = 0b00010010000000000000000000000000;
     static constexpr uint32_t OP_MAPSET        = 0b00010011000000000000000000000000;
+    static constexpr uint32_t OP_NEWMAP        = 0b00010100000000000000000000000000;
 }
 
 enum class ByteCodeType {
@@ -205,6 +205,7 @@ enum class ByteCodeType {
     StoreGlobal = bits::OP_STORE_G,
     Not = bits::OP_NOT,
     MapSet = bits::OP_MAPSET,
+    NewMap = bits::OP_NEWMAP,
 };
 
 class NativeFunction;
@@ -308,7 +309,18 @@ public:
 
     void ObjectInit(ObjectType type, Object* next);
 
+    void DeInit(Runtime* rt);
+
+    void SetMark(bool val);
+
+    bool IsMarked() const;
+
+    Object* GetNext();
+
+    void SetNext(Object* next);
+
 private:
+    bool isMarked;
     ObjectType type;
     Object* next;
 };
@@ -325,6 +337,8 @@ public:
     Function& operator=(Function&&) = delete;
 
     void Init(Runtime* rt, Object* next);
+
+    void DeInit(Runtime* rt);
 
     ByteCode* ByteCodeAt(Integer index) const;
 
@@ -372,6 +386,8 @@ public:
 
     void Init(Runtime* rt, Object* next, Integer arity, Integer localCount, Handle handle);
 
+    void DeInit(Runtime* rt);
+
     Integer GetArity() const;
 
     Integer GetLocalCount() const;
@@ -398,6 +414,8 @@ public:
     String& operator=(String&&) = delete;
 
     void Init(Runtime* rt, Object* next, Integer length, const char* data);
+
+    void DeInit(Runtime* rt);
 
     bool Equals(String* other) const;
 
@@ -429,6 +447,8 @@ public:
     Map& operator=(Map&&) = delete;
 
     void Init(Runtime* rt, Object* next);
+
+    void DeInit(Runtime* rt);
 
     Value* Get(Runtime* rt, Value* key);
 
@@ -479,8 +499,6 @@ public:
 
     System* GetSystem();
 
-    void Interpret();
-
     Value* StackAtAbsoluteIndex(Integer index);
 
     Value* Local(Integer index);
@@ -519,6 +537,8 @@ public:
 
     void MapSet(Integer dest, Integer arg1, Integer arg2);
 
+    void Interpret();
+
     template<typename T>
     T* New(Integer length);
 
@@ -528,13 +548,24 @@ public:
     template<typename T>
     void Free(T* ptr, Integer length);
 
-private:
+    void Gc();
 
+    void Mark();
+
+    void Mark(Value* val);
+
+    void Mark(Object* obj);
+
+    void Sweep();
+
+private:
     System* system{nullptr};
     Vector<CallFrame> frames;
     Vector<Value> stack;
     Map* globals{nullptr};
     Object* heap{nullptr};
+    Integer bytesAllocated{0};
+    Integer nextGc{0};
 };
 
 class RuntimeDefer {

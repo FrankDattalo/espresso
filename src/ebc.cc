@@ -106,11 +106,7 @@ struct BytecodeReader {
                 readFunction(rt, fn);
                 break;
             }
-            // map
-            case bits::CONST_MAP: {
-                dest->SetMap(rt->NewMap());
-                break;
-            }
+            // maps are not constants (newmap <reg> creates a map)
             default: {
                 rt->Local(Integer{0})->SetString(rt->NewString("Invalid constant"));
                 rt->Throw(Integer{0});

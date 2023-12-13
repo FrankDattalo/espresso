@@ -28,6 +28,8 @@ void Runtime::Init(System* system) {
     this->system = system;
     this->heap = nullptr;
     this->globals = nullptr;
+    this->bytesAllocated = Integer{0};
+    this->nextGc = Integer{128};
     
     this->stack.Init(this);
     this->frames.Init(this);
@@ -50,6 +52,13 @@ void Runtime::Init(System* system) {
 void Runtime::DeInit() {
     this->stack.DeInit(this);
     this->frames.DeInit(this);
+    
+    Object* curr = this->heap;
+    while (curr != nullptr) {
+        Object* toDeInit = curr;
+        curr = curr->GetNext();
+        toDeInit->DeInit(this);
+    }
 }
 
 System* Runtime::GetSystem() {
@@ -117,34 +126,44 @@ void Runtime::Invoke(Integer localBase, Integer argumentCount) {
 template<typename T>
 T* Runtime::New(Integer count) {
     // TODO: size checking
-    // TODO: allocation tracking
     std::int64_t size = count.Unwrap() * sizeof(T);
+    this->bytesAllocated = Integer{size + this->bytesAllocated.Unwrap()};
+    this->Gc();
     T* result = static_cast<T*>(this->system->ReAllocate(nullptr, 0, size));
     if (result == nullptr) {
         Panic("Out Of Memory");
         return nullptr;
     }
+    // std::printf("New %s [%p, %p)\n", typeid(T).name(), (void*) result, (void*) &result[count.Unwrap()]);
     return result;
 }
 
 template<typename T>
 T* Runtime::ReAllocate(T* data, Integer prevCount, Integer newCount) {
     // TODO: size checking
-    // TODO: allocation tracking
     std::int64_t prevSize = prevCount.Unwrap() * sizeof(T);
     std::int64_t newSize = newCount.Unwrap() * sizeof(T);
+    this->bytesAllocated = Integer{this->bytesAllocated.Unwrap() - prevSize + newSize};
+    if (newSize > prevSize) {
+        this->Gc();
+    }
     T* result = static_cast<T*>(this->system->ReAllocate(data, prevSize, newSize));
     if (result == nullptr) {
         Panic("Out Of Memory");
         return nullptr;
     }
+    // std::printf("Realloc-Free %s [%p, %p)\n", typeid(T).name(), (void*) data, (void*) &data[prevCount.Unwrap()]);
+    // std::printf("Realloc-New %s [%p, %p)\n", typeid(T).name(), (void*) result, (void*) &result[newCount.Unwrap()]);
     return result;
 }
 
 template<typename T>
 void Runtime::Free(T* pointer, Integer count) {
     // TODO: size checking
-    this->system->ReAllocate(pointer, sizeof(T) * count.Unwrap(), 0);
+    std::int64_t size = count.Unwrap() * sizeof(T);
+    this->bytesAllocated = Integer{this->bytesAllocated.Unwrap() - size};
+    this->system->ReAllocate(pointer, size, 0);
+    // std::printf("Free %s [%p, %p)\n", typeid(T).name(), (void*) pointer, (void*) &pointer[count.Unwrap()]);
 }
 
 RuntimeDefer::RuntimeDefer(Runtime* rt, RuntimeDefer::Handle fn)
@@ -351,6 +370,12 @@ void Runtime::Interpret() {
                 Integer arg1 = byteCode->SmallArgument1();
                 this->Return(arg1);
                 return;
+            }
+            case ByteCodeType::NewMap: {
+                CurrentFrame()->AdvanceProgramCounter();
+                Integer arg1 = byteCode->SmallArgument1();
+                this->Local(arg1)->SetMap(NewMap());
+                break;
             }
             case ByteCodeType::Copy: {
                 CurrentFrame()->AdvanceProgramCounter();
@@ -608,6 +633,7 @@ void String::Init(Runtime* rt, Object* next, Integer length, const char* data) {
 }
 
 void Object::ObjectInit(ObjectType type, Object* next) {
+    this->isMarked = false;
     this->type = type;
     this->next = next;
 }
@@ -950,10 +976,13 @@ ByteCode* Function::PushByteCode(Runtime* rt) {
 
 void Function::ReserveConstants(Runtime* rt, Integer val) {
     this->constants.Reserve(rt, val);
+
 }
 
 Value* Function::PushConstant(Runtime* rt) {
-    return this->constants.Push(rt);
+    Value* result = this->constants.Push(rt);
+    result->SetNil();
+    return result;
 }
 
 void Function::SetStack(Integer arity, Integer localCount) {
@@ -1015,7 +1044,6 @@ void Function::Verify(Runtime* rt) const {
 
 void ByteCode::Verify(Runtime* rt, const Function* fn) const {
 
-
     std::int64_t constantCount = fn->GetConstantCount().Unwrap();
     std::int64_t localCount = fn->GetLocalCount().Unwrap();
     std::int64_t byteCodeCount = fn->GetByteCodeCount().Unwrap();
@@ -1066,6 +1094,10 @@ void ByteCode::Verify(Runtime* rt, const Function* fn) const {
         }
         case ByteCodeType::Return: {
             validateRegisterIsReadable(this->SmallArgument1(), "Invalid readable register for Return instruction");
+            break;
+        }
+        case ByteCodeType::NewMap: {
+            validateRegisterIsWritable(this->SmallArgument1(), "Invalid writable register for NewMap instruction");
             break;
         }
         case ByteCodeType::LoadConstant: {
@@ -1162,6 +1194,233 @@ void NativeFunction::Verify(Runtime* rt) const {
     if (this->localCount.Unwrap() <= 0) {
         rt->Local(Integer{0})->SetString(rt->NewString("Invalid localCount for nativefunction. Must be >= 1"));
         rt->Throw(Integer{0});
+    }
+}
+
+Object* Object::GetNext() {
+    return this->next;
+}
+
+void Object::SetNext(Object* next) {
+    this->next = next;
+}
+
+bool Object::IsMarked() const {
+    return this->isMarked;
+}
+
+void Object::SetMark(bool val) {
+    this->isMarked = val;
+}
+
+ObjectType Object::Type() const {
+    return this->type;
+}
+
+void Object::DeInit(Runtime* rt) {
+    switch (this->Type()) {
+        case ObjectType::Function: {
+            Function* fn = (Function*) this;
+            fn->DeInit(rt);
+            break;
+        }
+        case ObjectType::NativeFunction: {
+            NativeFunction* nativeFn = (NativeFunction*) this;
+            nativeFn->DeInit(rt);
+            break;
+        }
+        case ObjectType::String: {
+            String* str = (String*) this;
+            str->DeInit(rt);
+            break;
+        }
+        case ObjectType::Map: {
+            Map* map = (Map*) this;
+            map->DeInit(rt);
+            break;
+        }
+        default: {
+            Panic("Unknown Object::DeInit");
+        }
+    }
+}
+
+void String::DeInit(Runtime* rt) {
+    this->data.DeInit(rt);
+    rt->Free<String>(this, Integer{1});
+}
+
+void Map::DeInit(Runtime* rt) {
+    this->entries.DeInit(rt);
+    rt->Free<Map>(this, Integer{1});
+}
+
+void NativeFunction::DeInit(Runtime* rt) {
+    rt->Free<NativeFunction>(this, Integer{1});
+}
+
+void Function::DeInit(Runtime* rt) {
+    this->byteCode.DeInit(rt);
+    this->constants.DeInit(rt);
+    rt->Free<Function>(this, Integer{1});
+}
+
+void Runtime::Mark(Object* obj) {
+    if (obj->IsMarked()) {
+        return;
+    }
+    obj->SetMark(true);
+    switch (obj->Type()) {
+        case ObjectType::Function: {
+            Function* fn = (Function*) obj;
+            std::int64_t constantCount = fn->GetConstantCount().Unwrap();
+            for (std::int64_t i = 0; i < constantCount; i++) {
+                Value* constant = fn->ConstantAt(Integer{i});
+                Mark(constant);
+            }
+            break;
+        }
+        case ObjectType::NativeFunction: {
+            break;
+        }
+        case ObjectType::String: {
+            break;
+        }
+        case ObjectType::Map: {
+            Map* map = (Map*) obj;
+            Map::Iterator iter = map->GetIterator();
+            while (iter.HasNext()) {
+                Mark(iter.Key());
+                Mark(iter.Value());
+            }
+            break;
+        }
+        default: {
+            Panic("Unknown ObjectType in Mark");
+        }
+    }
+}
+
+void Runtime::Mark(Value* val) {
+    switch (val->GetType()) {
+        case ValueType::Nil: {
+            break;
+        }
+        case ValueType::Integer: {
+            break;
+        }
+        case ValueType::Double: {
+            break;
+        }
+        case ValueType::Boolean: {
+            break;
+        }
+        case ValueType::Function: {
+            // std::printf("[GC] Mark function at %p\n", (void*) val);
+            Mark(val->GetFunction(this));
+            break;
+        }
+        case ValueType::NativeFunction: {
+            // std::printf("[GC] Mark native function at %p\n", (void*) val);
+            Mark(val->GetNativeFunction(this));
+            break;
+        }
+        case ValueType::String: {
+            // std::printf("[GC] Mark string at %p\n", (void*) val);
+            Mark(val->GetString(this));
+            break;
+        }
+        case ValueType::Map: {
+            // std::printf("[GC] Mark map at %p\n", (void*) val);
+            Mark(val->GetMap(this));
+            break;
+        }
+        default: {
+            // std::printf("[GC] Mark UNKNOWN at %p\n", (void*) val);
+            Panic("Unknown ValueType in Mark");
+        }
+    }
+}
+
+void Runtime::Sweep() {
+    Object* prev = nullptr;
+    Object* iter = this->heap;
+
+    while (iter != nullptr) {
+        Object* obj = iter;
+        iter = iter->GetNext();
+
+        if (obj->IsMarked()) {
+            prev = obj;
+            obj->SetMark(false);
+            continue;
+        }
+
+
+        Object* next = obj->GetNext();
+        
+        // 1. start of heap
+        if (obj == this->heap) {
+            // std::printf("[GC] Free(front) %p\n", (void*) obj);
+            this->heap = next;
+        // 2. end of heap
+        } else if (next == nullptr) {
+            // std::printf("[GC] Free(end) %p\n", (void*) obj);
+            prev = nullptr;
+        // 3. middle of heap
+        } else if (obj != this->heap && next != nullptr) {
+            // prev should never be null here because at some
+            // point we must have found a valid object at the start
+            // of the heap otherwise we never would have gotten here
+            // std::printf("[GC] Free(middle) %p\n", (void*) obj);
+            prev->SetNext(next);
+        } else {
+            Panic("Unhandled case on gc sweep");
+        }
+
+        obj->DeInit(this);
+    }
+}
+
+void Runtime::Gc() {
+    Integer sizeBefore = this->bytesAllocated;
+
+    if (this->bytesAllocated.Unwrap() < this->nextGc.Unwrap()) {
+        return;
+    }
+
+    std::printf("[GC] Starting: bytes allocating %lld > next gc %lld\n", this->bytesAllocated.Unwrap(), this->nextGc.Unwrap());
+
+    this->Mark(this->globals);
+
+    // std::printf("[GC] Done Marking Globals\n");
+
+    std::int64_t frameCount = this->frames.Length().Unwrap();
+    for (std::int64_t i = 0; i < frameCount; i++) {
+
+        CallFrame* frame = this->frames.At(Integer{i});
+
+        // std::printf("[GC] Marking Frame %lld [%lld, %lld)\n", i,
+        //     frame->AbsoluteIndex(Integer{0}).Unwrap(), 
+        //     frame->AbsoluteIndex(frame->Size()).Unwrap());
+
+        std::int64_t frameSize = frame->Size().Unwrap();
+        for (std::int64_t j = 0; j < frameSize; j++) {
+
+            Value* val = frame->At(this, Integer{j});
+            this->Mark(val);
+        }
+    }
+    
+    // std::printf("[GC] Done Marking Frames\n");
+
+    this->Sweep();
+
+    std::printf("[GC] Reclaimed: %llu -> %llu\n", sizeBefore.Unwrap(), this->bytesAllocated.Unwrap());
+
+    this->nextGc = Integer{2 * this->bytesAllocated.Unwrap()};
+    if (this->nextGc.Unwrap() <= 0) {
+        this->nextGc = Integer{128};
     }
 }
 

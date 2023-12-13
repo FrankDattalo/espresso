@@ -1,0 +1,10 @@
+
+arity 1
+
+label @start
+
+newmap R1
+
+jump @start
+
+locals #R

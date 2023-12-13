@@ -1,6 +1,6 @@
 arity 1
 
-loadc R1 #C map
+newmap R1
 
 mapset R1 R1 R1
 

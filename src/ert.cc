@@ -339,6 +339,9 @@ void Runtime::Interpret() {
     while (true) {
         Function* function = Local(Integer{0})->GetFunction(this);
         ByteCode* byteCode = function->ByteCodeAt(CurrentFrame()->ProgramCounter());
+
+        espresso::native::debugger::Breakpoint(this);
+
         switch (byteCode->Type()) {
             case ByteCodeType::NoOp: {
                 CurrentFrame()->AdvanceProgramCounter();
@@ -455,6 +458,14 @@ void Runtime::Interpret() {
             }
         }
     }
+}
+
+Integer Runtime::FrameCount() const {
+    return this->frames.Length();
+}
+
+CallFrame* Runtime::FrameAt(Integer index) const {
+    return this->frames.At(index);
 }
 
 Value* Runtime::Local(Integer num) {
@@ -1338,6 +1349,7 @@ void Runtime::Mark(Value* val) {
         default: {
             // std::printf("[GC] Mark UNKNOWN at %p\n", (void*) val);
             Panic("Unknown ValueType in Mark");
+            
         }
     }
 }

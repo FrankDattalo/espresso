@@ -8,6 +8,12 @@ namespace native {
 
 void RegisterNatives(Runtime* rt);
 
+namespace debugger {
+
+void Breakpoint(Runtime* runtime);
+
+} // debugger
+
 }
 
 }

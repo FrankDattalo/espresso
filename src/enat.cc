@@ -209,6 +209,163 @@ void Print(Runtime* rt, Value* val) {
     DoPrint(rt, val, nullptr, false);
 }
 
+namespace debugger {
+
+void PrintByteCode(Runtime* rt, Function* fn, ByteCode* bc) {
+    static constexpr const char* fmt = "%-8s";
+    switch (bc->Type()) {
+        case ByteCodeType::NoOp: {
+            std::printf(fmt, "noop");
+            std::printf("\n");
+            break;
+        }
+        case ByteCodeType::Return: {
+            std::printf(fmt, "return");
+            std::printf("\n");
+            break;
+        }
+        case ByteCodeType::LoadConstant: {
+            std::printf(fmt, "loadc");
+            std::printf("R%lld ", bc->SmallArgument1().Unwrap());
+            DoPrint(rt, fn->ConstantAt(bc->LargeArgument()), nullptr, true);
+            std::printf("\n");
+            break;
+        }
+        case ByteCodeType::LoadGlobal: {
+            std::printf(fmt, "loadg");
+            std::printf(
+                "R%lld R%lld\n", 
+                bc->SmallArgument1().Unwrap(), bc->SmallArgument2().Unwrap());
+            break;
+        }
+        case ByteCodeType::Invoke: {
+            std::printf(fmt, "invoke");
+            std::printf(
+                "R%lld %lld\n", 
+                bc->SmallArgument1().Unwrap(), bc->SmallArgument2().Unwrap());
+            break;
+        }
+        case ByteCodeType::Copy: {
+            std::printf(fmt, "copy");
+            std::printf(
+                "R%lld R%lld\n", 
+                bc->SmallArgument1().Unwrap(), bc->SmallArgument2().Unwrap());
+            break;
+        }
+        case ByteCodeType::Equal: {
+            std::printf(fmt, "equal");
+            std::printf(
+                "R%lld R%lld R%lld\n", 
+                bc->SmallArgument1().Unwrap(), bc->SmallArgument2().Unwrap(), bc->SmallArgument3().Unwrap());
+            break;
+        }
+        case ByteCodeType::Add: {
+            std::printf(fmt, "add");
+            std::printf(
+                "R%lld R%lld R%lld\n", 
+                bc->SmallArgument1().Unwrap(), bc->SmallArgument2().Unwrap(), bc->SmallArgument3().Unwrap());
+            break;
+        }
+        case ByteCodeType::Subtract: {
+            std::printf(fmt, "sub");
+            std::printf(
+                "R%lld R%lld R%lld\n", 
+                bc->SmallArgument1().Unwrap(), bc->SmallArgument2().Unwrap(), bc->SmallArgument3().Unwrap());
+            break;
+        }
+        case ByteCodeType::Multiply: {
+            std::printf(fmt, "mult");
+            std::printf(
+                "R%lld R%lld R%lld\n", 
+                bc->SmallArgument1().Unwrap(), bc->SmallArgument2().Unwrap(), bc->SmallArgument3().Unwrap());
+            break;
+        }
+        case ByteCodeType::JumpIfFalse: {
+            std::printf(fmt, "jumpf");
+            std::printf(
+                "R%lld %lld\n", 
+                bc->SmallArgument1().Unwrap(), bc->LargeArgument().Unwrap());
+            break;
+        }
+        case ByteCodeType::Jump: {
+            std::printf(fmt, "jump");
+            std::printf("%lld\n", bc->LargeArgument().Unwrap());
+            break;
+        }
+        case ByteCodeType::StoreGlobal: {
+            std::printf(fmt, "storeg");
+            std::printf(
+                "R%lld R%lld\n", 
+                bc->SmallArgument1().Unwrap(), bc->SmallArgument2().Unwrap());
+            break;
+        }
+        case ByteCodeType::Not: {
+            std::printf(fmt, "not");
+            std::printf(
+                "R%lld\n", 
+                bc->SmallArgument1().Unwrap());
+            break;
+        }
+        case ByteCodeType::MapSet: {
+            std::printf(fmt, "mapset");
+            std::printf(
+                "R%lld R%lld R%lld\n", 
+                bc->SmallArgument1().Unwrap(),
+                bc->SmallArgument2().Unwrap(),
+                bc->SmallArgument3().Unwrap());
+            break;
+        }
+        case ByteCodeType::NewMap: {
+            std::printf(fmt, "newmap");
+            std::printf(
+                "R%lld\n",
+                bc->SmallArgument1().Unwrap());
+            break;
+        }
+        default: {
+            Panic("Unhandled ByteCodeType");
+        }
+    }
+
+}
+
+void Breakpoint(Runtime* runtime) {
+    std::printf("\033[2J\033[1;1H");
+    std::int64_t framesCount = runtime->FrameCount().Unwrap();
+    for (std::int64_t i = framesCount - 1; i >= 0; i--) {
+        std::printf("[%lld]", i);
+        CallFrame* frame = runtime->FrameAt(Integer{i});
+        std::int64_t frameSize = frame->Size().Unwrap();
+        for (std::int64_t j = 0; j < frameSize; j++) {
+            Value* val = frame->At(runtime, Integer{j});
+            std::printf(" ");
+            espresso::native::DoPrint(runtime, val, nullptr, true);
+        }
+        std::printf("\n");
+    }
+    std::printf("\n");
+
+    CallFrame* frame = runtime->CurrentFrame();
+    Function* fn = frame->At(runtime, Integer{0})->GetFunction(runtime);
+    std::int64_t bytecodeCount = fn->GetByteCodeCount().Unwrap();
+    std::int64_t currentByteCode = frame->ProgramCounter().Unwrap();
+
+    for (std::int64_t i = 0; i < bytecodeCount; i++) {
+        std::printf("[%03lld] ", i);
+        if (i == currentByteCode) {
+            std::printf(">> ");
+        } else {
+            std::printf("   ");
+        }
+        ByteCode* bc = fn->ByteCodeAt(Integer{i});
+        PrintByteCode(runtime, fn, bc);
+    }
+
+    std::getc(stdin);
+}
+
+} // debugger
+
 } // native
 
 } // espresso

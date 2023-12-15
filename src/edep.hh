@@ -5,3 +5,4 @@
 #include <cstring>
 #include <cstdio>
 #include <stdexcept>
+#include <cctype>

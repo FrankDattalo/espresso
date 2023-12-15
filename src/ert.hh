@@ -479,6 +479,7 @@ private:
     Vector<Entry> entries;
 };
 
+
 class Runtime {
 public:
     Runtime() = default;
@@ -496,6 +497,10 @@ public:
     void Invoke(Integer base, Integer argumentCount);
 
     CallFrame* CurrentFrame();
+
+    Integer FrameCount() const;
+
+    CallFrame* FrameAt(Integer index) const;
 
     System* GetSystem();
 

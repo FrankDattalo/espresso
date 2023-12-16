@@ -123,44 +123,38 @@ void Runtime::Invoke(Integer localBase, Integer argumentCount) {
     }
 }
 
-template<typename T>
-T* Runtime::New(Integer count) {
+void* Runtime::RawNew(Integer itemSize, Integer count) {
     // TODO: size checking
-    std::int64_t size = count.Unwrap() * sizeof(T);
+    std::int64_t size = count.Unwrap() * itemSize.Unwrap();
     this->bytesAllocated = Integer{size + this->bytesAllocated.Unwrap()};
     this->Gc();
-    T* result = static_cast<T*>(this->system->ReAllocate(nullptr, 0, size));
+    void* result = this->system->ReAllocate(nullptr, 0, size);
     if (result == nullptr) {
         Panic("Out Of Memory");
         return nullptr;
     }
-    // std::printf("New %s [%p, %p)\n", typeid(T).name(), (void*) result, (void*) &result[count.Unwrap()]);
     return result;
 }
 
-template<typename T>
-T* Runtime::ReAllocate(T* data, Integer prevCount, Integer newCount) {
+void* Runtime::RawReAllocate(void* data, Integer itemSize, Integer prevCount, Integer newCount) {
     // TODO: size checking
-    std::int64_t prevSize = prevCount.Unwrap() * sizeof(T);
-    std::int64_t newSize = newCount.Unwrap() * sizeof(T);
+    std::int64_t prevSize = prevCount.Unwrap() * itemSize.Unwrap();
+    std::int64_t newSize = newCount.Unwrap() * itemSize.Unwrap();
     this->bytesAllocated = Integer{this->bytesAllocated.Unwrap() - prevSize + newSize};
     if (newSize > prevSize) {
         this->Gc();
     }
-    T* result = static_cast<T*>(this->system->ReAllocate(data, prevSize, newSize));
+    void* result = this->system->ReAllocate(data, prevSize, newSize);
     if (result == nullptr) {
         Panic("Out Of Memory");
         return nullptr;
     }
-    // std::printf("Realloc-Free %s [%p, %p)\n", typeid(T).name(), (void*) data, (void*) &data[prevCount.Unwrap()]);
-    // std::printf("Realloc-New %s [%p, %p)\n", typeid(T).name(), (void*) result, (void*) &result[newCount.Unwrap()]);
     return result;
 }
 
-template<typename T>
-void Runtime::Free(T* pointer, Integer count) {
+void Runtime::RawFree(void* pointer, Integer itemSize, Integer count) {
     // TODO: size checking
-    std::int64_t size = count.Unwrap() * sizeof(T);
+    std::int64_t size = count.Unwrap() * itemSize.Unwrap();
     this->bytesAllocated = Integer{this->bytesAllocated.Unwrap() - size};
     this->system->ReAllocate(pointer, size, 0);
     // std::printf("Free %s [%p, %p)\n", typeid(T).name(), (void*) pointer, (void*) &pointer[count.Unwrap()]);
@@ -218,89 +212,6 @@ void DefaultSystem::Close(FILE* fp) {
     std::fclose(fp);
 }
 
-template<typename T>
-void Vector<T>::Init(Runtime* rt) {
-    InitWithCapacity(rt, Integer{0});
-}
-
-template<typename T>
-void Vector<T>::InitWithCapacity(Runtime* rt, Integer capacity) {
-    this->size = Integer{0};
-    this->capacity = capacity;
-    if (this->capacity.Unwrap() == 0) {
-        this->data = nullptr;
-    } else {
-        this->data = rt->New<T>(this->capacity);
-    }
-}
-
-template<typename T>
-void Vector<T>::DeInit(Runtime* rt) {
-    rt->Free<T>(this->data, this->capacity);
-}
-
-template<typename T>
-T* Vector<T>::At(Integer index) const {
-    std::int64_t val = index.Unwrap();
-    if (val >= size.Unwrap() || val < 0) {
-        Panic("IndexOutOfBounds");
-        return nullptr;
-    }
-    return &this->data[val];
-}
-
-template<typename T>
-T* Vector<T>::Push(Runtime* rt) {
-    if (this->size.Unwrap() == this->capacity.Unwrap()) {
-        Integer newCapacity = Integer{this->capacity.Unwrap() * 2};
-        if (newCapacity.Unwrap() == 0) {
-            newCapacity = Integer{8};
-        }
-        this->data = rt->ReAllocate<T>(this->data, this->capacity, newCapacity);
-        this->capacity = newCapacity;
-    }
-    T* result = &this->data[this->size.Unwrap()];
-    this->size = Integer{this->size.Unwrap() + 1};
-    return result;
-}
-
-template<typename T>
-void Vector<T>::Reserve(Runtime* rt, Integer capacity) {
-    if (this->capacity.Unwrap() >= capacity.Unwrap()) {
-        return;
-    }
-    this->data = rt->ReAllocate<T>(this->data, this->capacity, capacity);
-    this->capacity = capacity;
-}
-
-template<typename T>
-void Vector<T>::Pop() {
-    if (this->size.Unwrap() <= 0) {
-        Panic("Pop Underflow");
-        return;
-    }
-    this->size = Integer{this->size.Unwrap() - 1};
-}
-
-template<typename T>
-void Vector<T>::Truncate(Integer newSize) {
-    if (this->size.Unwrap() < newSize.Unwrap()) {
-        Panic("Truncate Underflow");
-        return;
-    }
-    this->size = newSize;
-}
-
-template<typename T>
-Integer Vector<T>::Length() const {
-    return this->size;
-}
-
-template<typename T>
-const T* Vector<T>::RawHeadPointer() const {
-    return this->data;
-}
-
 CallFrame* Runtime::CurrentFrame() {
     Integer length = frames.Length();
     Integer last = Integer{length.Unwrap() - 1};
@@ -340,7 +251,9 @@ void Runtime::Interpret() {
         Function* function = Local(Integer{0})->GetFunction(this);
         ByteCode* byteCode = function->ByteCodeAt(CurrentFrame()->ProgramCounter());
 
+        #if 1
         espresso::native::debugger::Breakpoint(this);
+        #endif
 
         switch (byteCode->Type()) {
             case ByteCodeType::NoOp: {
@@ -591,7 +504,7 @@ void Runtime::Throw(Integer idx) {
 }
 
 NativeFunction* Runtime::NewNativeFunction(Integer arity, Integer localCount, NativeFunction::Handle fn) {
-    NativeFunction* function = this->New<NativeFunction>(Integer{1});
+    NativeFunction* function = New<NativeFunction>(this, Integer{1});
     function->Init(this, this->heap, arity, localCount, fn);
     this->heap = function;
     return function;
@@ -624,13 +537,17 @@ void Runtime::DefineGlobal(Integer keyIndex, Integer valueIndex) {
     globals->Put(this, key, value);
 }
 
-String* Runtime::NewString(const char* message) {
+String* Runtime::NewString(const char* message, std::size_t givenLength) {
     // TODO: size converstion checking
-    Integer length = Integer{static_cast<std::int64_t>(std::strlen(message))};
-    String* str = this->New<String>(Integer{1});
+    Integer length = Integer{static_cast<std::int64_t>(givenLength)};
+    String* str = New<String>(this, Integer{1});
     str->Init(this, this->heap, length, message);
     this->heap = str;
     return str;
+}
+
+String* Runtime::NewString(const char* message) {
+    return NewString(message, std::strlen(message));
 }
 
 void String::Init(Runtime* rt, Object* next, Integer length, const char* data) {
@@ -650,14 +567,14 @@ void Object::ObjectInit(ObjectType type, Object* next) {
 }
 
 Function* Runtime::NewFunction() {
-    Function* function = this->New<Function>(Integer{1});
+    Function* function = New<Function>(this, Integer{1});
     function->Init(this, this->heap);
     this->heap = function;
     return function;
 }
 
 Map* Runtime::NewMap() {
-    Map* map = this->New<Map>(Integer{1});
+    Map* map = New<Map>(this, Integer{1});
     map->Init(this, this->heap);
     this->heap = map;
     return map;
@@ -966,7 +883,12 @@ void String::Clear() {
 }
 
 Integer String::Length() const {
-    return this->data.Length();
+    // -1 because the string is null terminated
+    std::int64_t result = this->data.Length().Unwrap() - 1;
+    if (result < 0) {
+        Panic("String::Length");
+    }
+    return Integer{result};
 }
 
 void String::Reserve(Runtime* rt, Integer cap) {
@@ -1059,6 +981,15 @@ void ByteCode::Verify(Runtime* rt, const Function* fn) const {
     std::int64_t localCount = fn->GetLocalCount().Unwrap();
     std::int64_t byteCodeCount = fn->GetByteCodeCount().Unwrap();
 
+    auto fmtAbort = [&](const char* format, Integer value) {
+        constexpr std::size_t BUFFER_SIZE = 100;
+        char buffer[BUFFER_SIZE];
+        std::snprintf(buffer, BUFFER_SIZE, format, value.Unwrap());
+        buffer[BUFFER_SIZE - 1] = '\0';
+        rt->Local(Integer{0})->SetString(rt->NewString(buffer));
+        rt->Throw(Integer{0});
+    };
+
     auto validateProgramCounter = [&](Integer val, const char* message) {
         std::int64_t newPc = val.Unwrap();
         if (newPc < 0 || newPc >= byteCodeCount) {
@@ -1070,24 +1001,21 @@ void ByteCode::Verify(Runtime* rt, const Function* fn) const {
     auto validateRegisterIsReadable = [&](Integer registerArg, const char* message) {
         std::int64_t regArg = registerArg.Unwrap();
         if (regArg >= localCount || regArg < 0) {
-            rt->Local(Integer{0})->SetString(rt->NewString(message));
-            rt->Throw(Integer{0});
+            fmtAbort(message, registerArg);
         }
     };
 
     auto validateRegisterIsWritable = [&](Integer registerArg, const char* message) {
         std::int64_t regArg = registerArg.Unwrap();
         if (regArg >= localCount || regArg <= 0) {
-            rt->Local(Integer{0})->SetString(rt->NewString(message));
-            rt->Throw(Integer{0});
+            fmtAbort(message, registerArg);
         }
     };
 
     auto validateConstantIsReadable = [&](Integer constantArg, const char* message) {
         std::int64_t constArg = constantArg.Unwrap();
         if (constArg >= constantCount) {
-            rt->Local(Integer{0})->SetString(rt->NewString(message));
-            rt->Throw(Integer{0});
+            fmtAbort(message, Integer{constArg});
         }
     };
 
@@ -1104,84 +1032,83 @@ void ByteCode::Verify(Runtime* rt, const Function* fn) const {
             break;
         }
         case ByteCodeType::Return: {
-            validateRegisterIsReadable(this->SmallArgument1(), "Invalid readable register for Return instruction");
+            validateRegisterIsReadable(this->SmallArgument1(), "Invalid readable register R%lld for Return instruction");
             break;
         }
         case ByteCodeType::NewMap: {
-            validateRegisterIsWritable(this->SmallArgument1(), "Invalid writable register for NewMap instruction");
+            validateRegisterIsWritable(this->SmallArgument1(), "Invalid writable register R%lld for NewMap instruction");
             break;
         }
         case ByteCodeType::LoadConstant: {
-            validateRegisterIsWritable(this->SmallArgument1(), "Invalid writable register for LoadConstant");
-            validateConstantIsReadable(this->LargeArgument(), "Invalid constant for LoadConstant");
+            validateRegisterIsWritable(this->SmallArgument1(), "Invalid writable register R%lld for LoadConstant");
+            validateConstantIsReadable(this->LargeArgument(), "Invalid constant %lld for LoadConstant");
             break;
         }
         case ByteCodeType::LoadGlobal: {
-            validateRegisterIsWritable(this->SmallArgument1(), "Invalid writable register for LoadGlobal");
-            validateRegisterIsReadable(this->SmallArgument2(), "Invalid readable register for LoadGlobal");
+            validateRegisterIsWritable(this->SmallArgument1(), "Invalid writable register R%lld for LoadGlobal");
+            validateRegisterIsReadable(this->SmallArgument2(), "Invalid readable register R%lld for LoadGlobal");
             break;
         }
         case ByteCodeType::Invoke: {
-            validateRegisterIsWritable(this->SmallArgument1(), "Invalid writable register for Invoke");
+            validateRegisterIsWritable(this->SmallArgument1(), "Invalid writable register R%lld for Invoke");
             std::int64_t argCount = this->SmallArgument2().Unwrap();
             if (argCount <= 0) {
-                rt->Local(Integer{0})->SetString(rt->NewString("Invalid argumentCount in Invoke"));
-                rt->Throw(Integer{0});
+                fmtAbort("Invalid argument count %lld in invoke", Integer{argCount});
             }
             break;
         }
         case ByteCodeType::Copy: {
-            validateRegisterIsWritable(this->SmallArgument1(), "Invalid writable register for Copy");
-            validateRegisterIsReadable(this->SmallArgument2(), "Invalid readable register for Copy");
+            validateRegisterIsWritable(this->SmallArgument1(), "Invalid writable register R%lld for Copy");
+            validateRegisterIsReadable(this->SmallArgument2(), "Invalid readable register R%lld for Copy");
             break;
         }
         case ByteCodeType::Equal: {
-            validateRegisterIsWritable(this->SmallArgument1(), "Invalid writable register for Equal");
-            validateRegisterIsReadable(this->SmallArgument2(), "Invalid readable register 1 for Equal");
-            validateRegisterIsReadable(this->SmallArgument3(), "Invalid readable register 2 for Equal");
+            validateRegisterIsWritable(this->SmallArgument1(), "Invalid writable register R%lld for Equal");
+            validateRegisterIsReadable(this->SmallArgument2(), "Invalid readable register 1 R%lld for Equal");
+            validateRegisterIsReadable(this->SmallArgument3(), "Invalid readable register 2 R%lld for Equal");
             break;
         }
         case ByteCodeType::MapSet: {
-            validateRegisterIsReadable(this->SmallArgument1(), "Invalid readable register 1 for MapSet");
-            validateRegisterIsReadable(this->SmallArgument2(), "Invalid readable register 2 for MapSet");
-            validateRegisterIsReadable(this->SmallArgument3(), "Invalid readable register 3 for MapSet");
+            validateRegisterIsReadable(this->SmallArgument1(), "Invalid readable register 1 R%lld for MapSet");
+            validateRegisterIsReadable(this->SmallArgument2(), "Invalid readable register 2 R%lld for MapSet");
+            validateRegisterIsReadable(this->SmallArgument3(), "Invalid readable register 3 R%lld for MapSet");
             break;
         }
         case ByteCodeType::Add: {
-            validateRegisterIsWritable(this->SmallArgument1(), "Invalid writable register for Add");
-            validateRegisterIsReadable(this->SmallArgument2(), "Invalid readable register 1 for Add");
-            validateRegisterIsReadable(this->SmallArgument3(), "Invalid readable register 2 for Add");
+            validateRegisterIsWritable(this->SmallArgument1(), "Invalid writable register R%lld for Add");
+            validateRegisterIsReadable(this->SmallArgument2(), "Invalid readable register 1 R%lld for Add");
+            validateRegisterIsReadable(this->SmallArgument3(), "Invalid readable register 2 R%lld for Add");
             break;
         }
         case ByteCodeType::Subtract: {
-            validateRegisterIsWritable(this->SmallArgument1(), "Invalid writable register for Subtract");
-            validateRegisterIsReadable(this->SmallArgument2(), "Invalid readable register 1 for Subtract");
-            validateRegisterIsReadable(this->SmallArgument3(), "Invalid readable register 2 for Subtract");
+            validateRegisterIsWritable(this->SmallArgument1(), "Invalid writable register R%lld for Subtract");
+            validateRegisterIsReadable(this->SmallArgument2(), "Invalid readable register 1 R%lld for Subtract");
+            validateRegisterIsReadable(this->SmallArgument3(), "Invalid readable register 2 R%lld for Subtract");
             break;
         }
         case ByteCodeType::Multiply: {
-            validateRegisterIsWritable(this->SmallArgument1(), "Invalid writable register for Multiply");
-            validateRegisterIsReadable(this->SmallArgument2(), "Invalid readable register 1 for Multiply");
-            validateRegisterIsReadable(this->SmallArgument3(), "Invalid readable register 2 for Multiply");
+            validateRegisterIsWritable(this->SmallArgument1(), "Invalid writable register R%lld for Multiply");
+            validateRegisterIsReadable(this->SmallArgument2(), "Invalid readable register 1 R%lld for Multiply");
+            validateRegisterIsReadable(this->SmallArgument3(), "Invalid readable register 2 R%lld for Multiply");
             break;
         }
         case ByteCodeType::JumpIfFalse: {
-            validateRegisterIsReadable(this->SmallArgument1(), "Invalid readable register for JumpIfFalse");
-            validateProgramCounter(this->LargeArgument(), "Invalid program counter for JumpIfFalse");
+            validateRegisterIsReadable(this->SmallArgument1(), "Invalid readable register R%lld for JumpIfFalse");
+            validateProgramCounter(this->LargeArgument(), "Invalid program counter %lld for JumpIfFalse");
             break;
         }
         case ByteCodeType::Not: {
-            validateRegisterIsWritable(this->SmallArgument1(), "Invalid writable register for Not");
-            validateRegisterIsReadable(this->SmallArgument2(), "Invalid readable register for Not");
+            validateRegisterIsWritable(this->SmallArgument1(), "Invalid writable register R%lld for Not");
+            validateRegisterIsReadable(this->SmallArgument2(), "Invalid readable register R%lld for Not");
             break;
         }
         case ByteCodeType::Jump: {
-            validateProgramCounter(this->LargeArgument(), "Invalid program counter for Jump");
+            validateProgramCounter(this->LargeArgument(), "Invalid program counter %lld for Jump");
             break;
         }
         case ByteCodeType::StoreGlobal: {
-            validateRegisterIsWritable(this->SmallArgument1(), "Invalid readable register 1 for StoreGlobal");
-            validateRegisterIsReadable(this->SmallArgument2(), "Invalid readable register 2 for StoreGlobal");
+            validateRegisterIsWritable(this->SmallArgument1(), "Invalid readable register 1 R%lld for StoreGlobal");
+            validateRegisterIsReadable(this->SmallArgument2(), "Invalid readable register 2 R%lld for StoreGlobal");
             break;
         }
         default: {
@@ -1258,22 +1185,22 @@ void Object::DeInit(Runtime* rt) {
 
 void String::DeInit(Runtime* rt) {
     this->data.DeInit(rt);
-    rt->Free<String>(this, Integer{1});
+    Free<String>(rt, this, Integer{1});
 }
 
 void Map::DeInit(Runtime* rt) {
     this->entries.DeInit(rt);
-    rt->Free<Map>(this, Integer{1});
+    Free<Map>(rt, this, Integer{1});
 }
 
 void NativeFunction::DeInit(Runtime* rt) {
-    rt->Free<NativeFunction>(this, Integer{1});
+    Free<NativeFunction>(rt, this, Integer{1});
 }
 
 void Function::DeInit(Runtime* rt) {
     this->byteCode.DeInit(rt);
     this->constants.DeInit(rt);
-    rt->Free<Function>(this, Integer{1});
+    Free<Function>(rt, this, Integer{1});
 }
 
 void Runtime::Mark(Object* obj) {

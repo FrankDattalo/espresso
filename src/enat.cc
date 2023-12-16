@@ -38,6 +38,9 @@ static constexpr Entry ENTRIES[] = {
     {"readByteCode", 2, 3, [](Runtime* rt) {
         espresso::bytecode::Load(rt);
     }},
+    {"compile", 2, 4, [](Runtime* rt) {
+        espresso::native::compiler::Compile(rt);
+    }},
     {"verifyByteCode", 2, 4, [](Runtime* rt) {
         espresso::bytecode::Verify(rt);
     }},
@@ -62,7 +65,43 @@ static constexpr Entry ENTRIES[] = {
         map->Put(rt, rt->Local(Integer{0}), rt->StackAtAbsoluteIndex(result));
         rt->Copy(Integer{0}, Integer{2});
     }},
-    {"load", 2, 2, [](Runtime* rt) {
+    {"endsWith", 3, 3, [](Runtime* rt) {
+        String* haystack = rt->Local(Integer{1})->GetString(rt);
+        String* needle = rt->Local(Integer{2})->GetString(rt);
+        
+        if (needle->Length().Unwrap() > haystack->Length().Unwrap()) {
+            rt->Local(Integer{0})->SetBoolean(false);
+            return;
+        }
+
+        std::int64_t needleIndex = needle->Length().Unwrap() - 1;
+        std::int64_t haystackIndex = haystack->Length().Unwrap() - 1;
+
+        while (needleIndex >= 0) {
+
+            char needleCurr = needle->At(Integer{needleIndex});
+            char haystackCurr = haystack->At(Integer{haystackIndex});
+
+            if (needleCurr != haystackCurr) {
+                rt->Local(Integer{0})->SetBoolean(false);
+                return;
+            }
+
+            needleIndex--;
+            haystackIndex--;
+        }
+
+        rt->Local(Integer{0})->SetBoolean(true);
+        return;
+    }},
+    {"load", 2, 5, [](Runtime* rt) {
+
+        rt->Local(Integer{2})->SetString(rt->NewString("endsWith"));
+        rt->LoadGlobal(Integer{2}, Integer{2});
+        rt->Copy(Integer{3}, Integer{1});
+        rt->Local(Integer{4})->SetString(rt->NewString(".espresso"));
+        rt->Invoke(Integer{2}, Integer{3});
+        bool isSourceFile = rt->Local(Integer{2})->GetBoolean(rt);
 
         rt->Local(Integer{0})->SetString(rt->NewString("readFile"));
         rt->LoadGlobal(Integer{0}, Integer{0});
@@ -71,9 +110,15 @@ static constexpr Entry ENTRIES[] = {
         // local 1 contians file contents
         rt->Copy(Integer{1}, Integer{0});
 
-        rt->Local(Integer{0})->SetString(rt->NewString("readByteCode"));
-        rt->LoadGlobal(Integer{0}, Integer{0});
-        rt->Invoke(Integer{0}, Integer{2});
+        if (isSourceFile) {
+            rt->Local(Integer{0})->SetString(rt->NewString("compile"));
+            rt->LoadGlobal(Integer{0}, Integer{0});
+            rt->Invoke(Integer{0}, Integer{2});
+        } else {
+            rt->Local(Integer{0})->SetString(rt->NewString("readByteCode"));
+            rt->LoadGlobal(Integer{0}, Integer{0});
+            rt->Invoke(Integer{0}, Integer{2});
+        }
 
         rt->Copy(Integer{1}, Integer{0});
         rt->Local(Integer{0})->SetString(rt->NewString("verifyByteCode"));

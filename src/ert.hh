@@ -102,6 +102,15 @@ private:
 };
 
 template<typename T>
+T* New(Runtime* rt, Integer count);
+
+template<typename T>
+void Free(Runtime* rt, T* data, Integer count);
+
+template<typename T>
+T* ReAllocate(Runtime* rt, T* data, Integer prevCount, Integer newCount);
+
+template<typename T>
 class Vector {
 public:
     Vector() = default;
@@ -113,27 +122,81 @@ public:
     Vector(Vector&&) = delete;
     Vector& operator=(Vector&&) = delete;
 
-    void Init(Runtime* rt);
+    void Init(Runtime* rt) {
+        InitWithCapacity(rt, Integer{0});
+    }
 
-    void InitWithCapacity(Runtime* rt, Integer capacity);
+    void InitWithCapacity(Runtime* rt, Integer capacity) {
+        this->size = Integer{0};
+        this->capacity = capacity;
+        if (this->capacity.Unwrap() == 0) {
+            this->data = nullptr;
+        } else {
+            this->data = New<T>(rt, this->capacity);
+        }
+    }
 
-    void DeInit(Runtime* rt);
+    void DeInit(Runtime* rt) {
+        Free<T>(rt, this->data, this->capacity);
+    }
 
-    T* Push(Runtime* rt);
+    T* Push(Runtime* rt) {
+        if (this->size.Unwrap() == this->capacity.Unwrap()) {
+            Integer newCapacity = Integer{this->capacity.Unwrap() * 2};
+            if (newCapacity.Unwrap() == 0) {
+                newCapacity = Integer{8};
+            }
+            this->data = ReAllocate<T>(rt, this->data, this->capacity, newCapacity);
+            this->capacity = newCapacity;
+        }
+        T* result = &this->data[this->size.Unwrap()];
+        this->size = Integer{this->size.Unwrap() + 1};
+        return result;
+    }
 
-    void Pop();
+    void Pop() {
+        if (this->size.Unwrap() <= 0) {
+            Panic("Pop Underflow");
+            return;
+        }
+        this->size = Integer{this->size.Unwrap() - 1};
+    }
 
-    T* At(Integer index) const;
+    T* At(Integer index) const {
+        std::int64_t val = index.Unwrap();
+        if (val >= size.Unwrap() || val < 0) {
+            Panic("IndexOutOfBounds");
+            return nullptr;
+        }
+        return &this->data[val];
+    }
 
-    Integer Length() const;
+    Integer Length() const {
+        return this->size;
+    }
 
-    void Reserve(Runtime* rt, Integer cap);
+    void Reserve(Runtime* rt, Integer capacity) {
+        if (this->capacity.Unwrap() >= capacity.Unwrap()) {
+            return;
+        }
+        this->data = ReAllocate<T>(rt, this->data, this->capacity, capacity);
+        this->capacity = capacity;
+    }
 
-    const T* RawHeadPointer() const;
+    const T* RawHeadPointer() const {
+        return this->data;
+    }
 
-    void Truncate(Integer newLength);
+    void Truncate(Integer newLength) {
+        if (this->size.Unwrap() < newLength.Unwrap()) {
+            Panic("Truncate Underflow");
+            return;
+        }
+        this->size = newLength;
+    }
 
 private:
+
     T* data{nullptr};
     Integer size{0};
     Integer capacity{0};
@@ -189,7 +252,7 @@ namespace bits {
     static constexpr uint32_t OP_NEWMAP        = 0b00010100000000000000000000000000;
 }
 
-enum class ByteCodeType {
+enum class ByteCodeType : std::uint32_t {
     NoOp = bits::OP_NOOP,
     Return = bits::OP_RETURN,
     LoadConstant = bits::OP_LOAD_CONSTANT,
@@ -514,6 +577,8 @@ public:
 
     String* NewString(const char* data);
 
+    String* NewString(const char* data, std::size_t givenLength);
+
     NativeFunction* NewNativeFunction(Integer arity, Integer localCount, NativeFunction::Handle handle);
 
     void Throw(Integer localNumber);
@@ -544,14 +609,11 @@ public:
 
     void Interpret();
 
-    template<typename T>
-    T* New(Integer length);
+    void* RawNew(Integer itemSize, Integer count);
 
-    template<typename T>
-    T* ReAllocate(T* ptr, Integer prevLength, Integer length);
+    void* RawReAllocate(void* ptr, Integer itemSize, Integer prevCount, Integer newCount);
 
-    template<typename T>
-    void Free(T* ptr, Integer length);
+    void RawFree(void* ptr, Integer itemSize, Integer count);
 
     void Gc();
 
@@ -591,5 +653,23 @@ private:
     Runtime* runtime;
     Handle handle;
 };
+
+template<typename T>
+T* New(Runtime* rt, Integer count) {
+    void* result = rt->RawNew(Integer{sizeof(T)}, count);
+    return reinterpret_cast<T*>(result);
+}
+
+template<typename T>
+void Free(Runtime* rt, T* data, Integer count) {
+    rt->RawFree(data, Integer{sizeof(T)}, count);
+}
+
+template<typename T>
+T* ReAllocate(Runtime* rt, T* data, Integer prevCount, Integer newCount) {
+    void* result = rt->RawReAllocate(data, Integer{sizeof(T)}, prevCount, newCount);
+    return reinterpret_cast<T*>(result);
+}
+
 
 }

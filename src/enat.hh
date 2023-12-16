@@ -14,6 +14,12 @@ void Breakpoint(Runtime* runtime);
 
 } // debugger
 
+namespace compiler {
+
+void Compile(Runtime* rt);
+
+} // compiler
+
 }
 
 }

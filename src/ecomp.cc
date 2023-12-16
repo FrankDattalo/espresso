@@ -313,6 +313,16 @@ struct Compiler {
                 // compiler bug
                 Panic("Stack not cleared before local definition");
             }
+
+            // ensure no duplicate
+            std::int64_t localsCount = locals.Length().Unwrap();
+            for (std::int64_t i = 0; i < localsCount; i++) {
+                Variable* var = locals.At(Integer{i});
+                if (0 == std::strncmp(var->token.source, token.source, var->token.length)) {
+                    Abort(runtime, "Duplicate variable definition");
+                }
+            }
+
             // registers are 8 bytes only, any other locals are unadressable
             // TODO: refactor magic number
             Integer id = locals.Length();
@@ -351,61 +361,22 @@ struct Compiler {
     };
 
     struct Tokenizer {
-        struct Matcher {
-            using Handle = std::int64_t(*)(const Matcher* context, const char* source, std::int64_t length);
 
+        struct Matcher {
+            using Handle = std::int64_t(*)(Matcher* matcher, const char* head, std::int64_t length);
+
+            TokenType type;
+            Handle handle;
             union {
                 const char* string;
-            } as;
-
-            const TokenType type;
-
-            const Handle handle;
-        };
-
-        static std::int64_t prefixMatcher(const Matcher* context, const char* source, std::int64_t length) {
-            const char* data = context->as.string;
-            std::int64_t i = 0;
-            while (i < length && data[i] != '\0') {
-                if (data[i] != source[i]) {
-                    return 0;
-                }
-                i++;
-            }
-            if (data[i] == '\0') {
-                return std::strlen(data);
-            } else {
-                return 0;
-            }
-        }
-
-        constexpr static Matcher prefix(TokenType type, const char* prefixValue) {
-            return {
-                { prefixValue },
-                type,
-                prefixMatcher,
-            };
-        }
-
-        static std::int64_t unknownMatcher(const Matcher* context, const char* source, std::int64_t length) {
-            (void)(context);
-            (void)(source);
-            (void)(length);
-            return 1;
-        }
-
-        constexpr static Matcher unknown() {
-            return {
-                { nullptr },
-                TokenType::Unknown,
-                unknownMatcher
-            };
+            } data;
         };
 
         const char* string;
         std::int64_t length;
         std::int64_t index;
         Deque<Token, 2> tokenBuffer;
+        Vector<Matcher> matchers;
 
         void Init(Runtime* runtime, String* source) {
             (void)(runtime);
@@ -414,48 +385,13 @@ struct Compiler {
             this->length = source->Length().Unwrap();
             this->index = 0;
             this->tokenBuffer = Deque<Token, 2>();
+            this->matchers.Init(runtime);
+
+            InitMatchers(runtime);
         }
 
-        void DeInit(Runtime* runtime) {
-            (void)(runtime);
-            // nothing needed here
-        }
-
-        void PutBack(Token* token) {
-            tokenBuffer.Put(token);
-        }
 
         Token RawNext() {
-
-            static constexpr Matcher matchers[] = {
-                prefix(TokenType::Global, "global"),
-                prefix(TokenType::Var, "var"),
-                prefix(TokenType::If, "if"),
-                prefix(TokenType::Else, "else"),
-                prefix(TokenType::While, "while"),
-                prefix(TokenType::Return, "return"),
-                prefix(TokenType::Boolean, "true"),
-                prefix(TokenType::Boolean, "false"),
-                prefix(TokenType::Nil, "nil"),
-                prefix(TokenType::Fn, "fn"),
-                prefix(TokenType::Assign, "="),
-                prefix(TokenType::Identifier, "id1"),
-                prefix(TokenType::Identifier, "id2"),
-                prefix(TokenType::Identifier, "id3"),
-                prefix(TokenType::Identifier, "id4"),
-                prefix(TokenType::LeftParen, "("),
-                prefix(TokenType::RightParen, ")"),
-                prefix(TokenType::Period, "."),
-                prefix(TokenType::LeftCurly, "{"),
-                prefix(TokenType::RightCurly, "}"),
-                prefix(TokenType::SemiColon, ";"),
-                prefix(TokenType::WhiteSpace, " "),
-                prefix(TokenType::WhiteSpace, "\t"),
-                prefix(TokenType::WhiteSpace, "\r"),
-                prefix(TokenType::WhiteSpace, "\n"),
-                prefix(TokenType::WhiteSpace, "\r\n"),
-                unknown(),
-            };
 
             if (tokenBuffer.Length() > 0) {
                 return tokenBuffer.Take();
@@ -468,18 +404,28 @@ struct Compiler {
             const char* head = &this->string[this->index];
             std::int64_t length = this->length - this->index;
 
-            for (const Matcher& matcher : matchers) {
-                std::int64_t matchLength = matcher.handle(&matcher, head, length);
+            std::int64_t matcherCount = this->matchers.Length().Unwrap();
+            for (std::int64_t i = 0; i < matcherCount; i++) {
+                Matcher* matcher = this->matchers.At(Integer{i});
+                std::int64_t matchLength = matcher->handle(matcher, head, length);
                 if (matchLength == 0) {
                     continue;
                 }
-                TokenType tokenType = matcher.type;
+                TokenType tokenType = matcher->type;
                 this->index += matchLength;
                 return Token{tokenType, head, matchLength};
             }
 
             Panic("No tokenizer match");
             throw nullptr;
+        }
+
+        void DeInit(Runtime* runtime) {
+            this->matchers.DeInit(runtime);
+        }
+
+        void PutBack(Token* token) {
+            tokenBuffer.Put(token);
         }
 
         Token Expect(Runtime* runtime, TokenType type) {
@@ -522,6 +468,173 @@ struct Compiler {
             bool eof = t.type == TokenType::EndOfFile;
             PutBack(&t);
             return eof;
+        }
+
+        void InitMatchers(Runtime* runtime) {
+            
+            using CharFn = int(*)(int);
+
+            Matcher::Handle literalMatcher = [](Matcher* matcher, const char* source, std::int64_t length) -> std::int64_t {
+                const char* data = matcher->data.string;
+                std::int64_t i = 0;
+                while (i < length && data[i] != '\0') {
+                    if (data[i] != source[i]) {
+                        return 0;
+                    }
+                    i++;
+                }
+                if (data[i] == '\0') {
+                    return std::strlen(data);
+                } else {
+                    return 0;
+                }
+                return 0;
+            };
+
+            Matcher::Handle unknownMatcher = [](Matcher* matcher, const char* source, std::int64_t length) -> std::int64_t {
+                (void)(matcher);
+                (void)(source);
+                (void)(length);
+                return 1;
+            };
+
+            Matcher::Handle identifierMatcher = [](Matcher* matcher, const char* source, std::int64_t length) -> std::int64_t {
+                (void)(matcher);
+                std::int64_t i = 0;
+                for (; i < length; i++) {
+                    CharFn checker = (i == 0) ? std::isalpha : std::isalnum;
+                    char c = source[i];
+                    if (!checker(c)) {
+                        break;
+                    }
+                }
+                return i;
+            };
+
+            Matcher::Handle doubleMatcher = [](Matcher* matcher, const char* source, std::int64_t length) -> std::int64_t {
+                (void)(matcher);
+                std::int64_t i = 0;
+                bool foundPeriod = false;
+                for (; i < length; i++) {
+                    char c = source[i];
+                    if (c == '.' && !foundPeriod) {
+                        foundPeriod = true;
+                        continue;
+                    }
+                    if (!std::isdigit(c)) {
+                        break;
+                    }
+                }
+                if (!foundPeriod) {
+                    return 0;
+                }
+                return i;
+            };
+
+            Matcher::Handle integerMatcher = [](Matcher* matcher, const char* source, std::int64_t length) -> std::int64_t {
+                (void)(matcher);
+                std::int64_t i = 0;
+                for (; i < length; i++) {
+                    char c = source[i];
+                    if (!std::isdigit(c)) {
+                        break;
+                    }
+                }
+                return i;
+            };
+
+            Matcher::Handle stringMatcher = [](Matcher* matcher, const char* source, std::int64_t length) -> std::int64_t {
+                (void)(matcher);
+                std::int64_t i = 0;
+                bool foundClosing = false;
+                for (; i < length; i++) {
+                    char c = source[i];
+                    if (i == 0) {
+                        if (c != '\"') {
+                            return 0;
+                        }
+                    } else {
+                        if (c == '\"') {
+                            i++;
+                            foundClosing = true;
+                            break;
+                        }
+                    }
+                }
+                if (!foundClosing) {
+                    return 0;
+                }
+                return i;
+            };
+            
+            Matcher::Handle commentMatcher = [](Matcher* matcher, const char* source, std::int64_t length) -> std::int64_t {
+                (void)(matcher);
+                std::int64_t i = 0;
+                for (; i < length; i++) {
+                    char c = source[i];
+                    if (i == 0) {
+                        if (c != '/') {
+                            return 0;
+                        }
+                    } else if (i == 1) {
+                        if (c != '*') {
+                            return 0;
+                        }
+                    } else if (c == '*') {
+                        if (i + 1 > length) {
+                            return 0;
+                        }
+                        char next = source[i + 1];
+                        if (next == '/') {
+                            return i + 2;
+                        }
+                    }
+                }
+                return 0;
+            };
+
+            auto literal = [&](TokenType type, const char* value) {
+                Matcher* matcher = this->matchers.Push(runtime);
+                matcher->type = type;
+                matcher->data.string = value;
+                matcher->handle = literalMatcher;
+            };
+
+            auto matcherFromHandle = [&](TokenType type, Matcher::Handle handle) {
+                Matcher* matcher = this->matchers.Push(runtime);
+                matcher->type = type;
+                matcher->data.string = nullptr;
+                matcher->handle = handle;
+            };
+
+            literal(TokenType::Global, "global");
+            literal(TokenType::Var, "var");
+            literal(TokenType::If, "if");
+            literal(TokenType::Else, "else");
+            literal(TokenType::While, "while");
+            literal(TokenType::Return, "return");
+            literal(TokenType::Boolean, "true");
+            literal(TokenType::Boolean, "false");
+            literal(TokenType::Nil, "nil");
+            literal(TokenType::Fn, "fn");
+            literal(TokenType::Assign, "=");
+            literal(TokenType::LeftParen, "(");
+            literal(TokenType::RightParen, ")");
+            literal(TokenType::Period, ".");
+            literal(TokenType::LeftCurly, "{");
+            literal(TokenType::RightCurly, "}");
+            literal(TokenType::SemiColon, ";");
+            literal(TokenType::WhiteSpace, " ");
+            literal(TokenType::WhiteSpace, "\t");
+            literal(TokenType::WhiteSpace, "\r");
+            literal(TokenType::WhiteSpace, "\n");
+            literal(TokenType::WhiteSpace, "\r\n");
+            matcherFromHandle(TokenType::Identifier, identifierMatcher);
+            matcherFromHandle(TokenType::Double, doubleMatcher);
+            matcherFromHandle(TokenType::Integer, integerMatcher);
+            matcherFromHandle(TokenType::String, stringMatcher);
+            matcherFromHandle(TokenType::WhiteSpace, commentMatcher);
+            matcherFromHandle(TokenType::Unknown, unknownMatcher);
         }
     };
 
@@ -625,6 +738,7 @@ struct Compiler {
         CurrentContext()->StackPop(); // key
         CurrentContext()->StackPop(); // value
         CurrentContext()->Emit(runtime, ByteCodeType::StoreGlobal, globalKey, globalValue);
+        tokenizer.Expect(runtime, TokenType::SemiColon);
     }
 
     void CompileVarStatement(Runtime* runtime) {
@@ -750,7 +864,15 @@ struct Compiler {
 
     void CompileString(Runtime* runtime) {
         Token token = tokenizer.Expect(runtime, TokenType::String);
-        Integer constantNumber = CurrentContext()->NewStringConstant(runtime, token.source, token.length);
+
+        const char* afterQuote = &token.source[1];
+        std::int64_t lengthWithoutQuotes = token.length - 2;
+
+        if (lengthWithoutQuotes < 0) {
+            Panic("CompileString length < 0");
+        }
+
+        Integer constantNumber = CurrentContext()->NewStringConstant(runtime, afterQuote, lengthWithoutQuotes);
         Integer registerDest = CurrentContext()->StackPush(runtime);
         CurrentContext()->EmitLong(runtime, ByteCodeType::LoadConstant, registerDest, constantNumber);
     }

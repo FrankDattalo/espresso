@@ -5,6 +5,9 @@
 8. Inheritance
 9. Closure support
 10. Bit pack values & object headers
+11. Constant deduplication in compiler
+12. Nicer error messages in compiler
+13. Location tracking in compiler
 
 # Done
 

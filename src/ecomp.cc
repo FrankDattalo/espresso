@@ -203,35 +203,49 @@ struct Compiler {
             scopes.DeInit(runtime);
         }
 
-        void Emit(Runtime* runtime, ByteCodeType byteCodeType, Integer reg1, Integer reg2, Integer reg3) {
+        Integer Emit(Runtime* runtime, ByteCodeType byteCodeType, Integer reg1, Integer reg2, Integer reg3) {
             std::uint32_t result = 0;
             result |= static_cast<std::uint32_t>(byteCodeType);
             result |= bits::ARG1_BITS & (static_cast<std::uint32_t>(reg1.Unwrap()) << bits::ARG1_SHIFT);
             result |= bits::ARG2_BITS & (static_cast<std::uint32_t>(reg2.Unwrap()) << bits::ARG2_SHIFT);
             result |= bits::ARG3_BITS & (static_cast<std::uint32_t>(reg3.Unwrap()) << bits::ARG3_SHIFT);
+            Integer id = destination->GetByteCodeCount();
             ByteCode* bc = destination->PushByteCode(runtime);
             bc->Init(runtime, result);
+            return id;
         }
 
-        void EmitLong(Runtime* runtime, ByteCodeType byteCodeType, Integer reg1, Integer longReg) {
+        Integer EmitLong(Runtime* runtime, ByteCodeType byteCodeType, Integer reg1, Integer longReg) {
+            Integer id = destination->GetByteCodeCount();
+            ByteCode* bc = destination->PushByteCode(runtime);
+            bc->Init(runtime, static_cast<std::uint32_t>(ByteCodeType::NoOp));
+            UpdateLong(runtime, id, byteCodeType, reg1, longReg);
+            return id;
+        }
+
+        Integer Emit(Runtime* runtime, ByteCodeType byteCodeType, Integer reg1, Integer reg2) {
+            return Emit(runtime, byteCodeType, reg1, reg2, Integer{0});
+        }
+
+        Integer Emit(Runtime* runtime, ByteCodeType byteCodeType, Integer reg1) {
+            return Emit(runtime, byteCodeType, reg1, Integer{0});
+        }
+
+        Integer Emit(Runtime* runtime, ByteCodeType byteCodeType) {
+            return Emit(runtime, byteCodeType, Integer{0});
+        }
+
+        Integer CurrentByteCodeLocation() {
+            return destination->GetByteCodeCount();
+        }
+
+        void UpdateLong(Runtime* runtime, Integer byteCodeIndex, ByteCodeType type, Integer reg1, Integer longReg) {
             std::uint32_t result = 0;
-            result |= static_cast<std::uint32_t>(byteCodeType);
+            result |= static_cast<std::uint32_t>(type);
             result |= bits::ARG1_BITS & (static_cast<std::uint32_t>(reg1.Unwrap()) << bits::ARG1_SHIFT);
             result |= bits::LARGE_ARG_BITS & (static_cast<std::uint32_t>(longReg.Unwrap()) << bits::LARGE_ARG_SHIFT);
-            ByteCode* bc = destination->PushByteCode(runtime);
+            ByteCode* bc = destination->ByteCodeAt(byteCodeIndex);
             bc->Init(runtime, result);
-        }
-
-        void Emit(Runtime* runtime, ByteCodeType byteCodeType, Integer reg1, Integer reg2) {
-            Emit(runtime, byteCodeType, reg1, reg2, Integer{0});
-        }
-
-        void Emit(Runtime* runtime, ByteCodeType byteCodeType, Integer reg1) {
-            Emit(runtime, byteCodeType, reg1, Integer{0});
-        }
-
-        void Emit(Runtime* runtime, ByteCodeType byteCodeType) {
-            Emit(runtime, byteCodeType, Integer{0});
         }
 
         Integer LocalCount() {
@@ -354,8 +368,8 @@ struct Compiler {
             if (scope->localsSize != this->locals.Length().Unwrap()) {
                 Panic("After end of definition this->locals != scope->localsSize");
             }
-            if (this->registerCount != scope->localsSize) {
-                Panic("After end of definition registerCount != localsSize");
+            if (this->registerCount < scope->localsSize) {
+                Panic("After end of definition registerCount < localsSize");
             }
         }
     };
@@ -389,7 +403,6 @@ struct Compiler {
 
             InitMatchers(runtime);
         }
-
 
         Token RawNext() {
 
@@ -470,25 +483,41 @@ struct Compiler {
             return eof;
         }
 
+        static std::int64_t literalMatcher(Matcher* matcher, const char* source, std::int64_t length) {
+            const char* data = matcher->data.string;
+            std::int64_t i = 0;
+            while (i < length && data[i] != '\0') {
+                if (data[i] != source[i]) {
+                    return 0;
+                }
+                i++;
+            }
+            if (data[i] == '\0') {
+                return std::strlen(data);
+            } else {
+                return 0;
+            }
+            return 0;
+        }
+
         void InitMatchers(Runtime* runtime) {
             
             using CharFn = int(*)(int);
 
-            Matcher::Handle literalMatcher = [](Matcher* matcher, const char* source, std::int64_t length) -> std::int64_t {
-                const char* data = matcher->data.string;
-                std::int64_t i = 0;
-                while (i < length && data[i] != '\0') {
-                    if (data[i] != source[i]) {
-                        return 0;
-                    }
-                    i++;
-                }
-                if (data[i] == '\0') {
-                    return std::strlen(data);
-                } else {
+            Matcher::Handle literalNeedingSeparatorMatcher = [](Matcher* matcher, const char* source, std::int64_t length) -> std::int64_t {
+                std::int64_t matchLength = literalMatcher(matcher, source, length);
+                if (matchLength == 0) {
                     return 0;
                 }
-                return 0;
+                if (matchLength == length) {
+                    return matchLength;
+                }
+                char next = source[matchLength];
+                if (std::isalnum(next)) {
+                    // not separated
+                    return 0;
+                }
+                return matchLength;
             };
 
             Matcher::Handle unknownMatcher = [](Matcher* matcher, const char* source, std::int64_t length) -> std::int64_t {
@@ -600,6 +629,13 @@ struct Compiler {
                 matcher->handle = literalMatcher;
             };
 
+            auto literalNeedingSeparator = [&](TokenType type, const char* value) {
+                Matcher* matcher = this->matchers.Push(runtime);
+                matcher->type = type;
+                matcher->data.string = value;
+                matcher->handle = literalNeedingSeparatorMatcher;
+            };
+
             auto matcherFromHandle = [&](TokenType type, Matcher::Handle handle) {
                 Matcher* matcher = this->matchers.Push(runtime);
                 matcher->type = type;
@@ -607,16 +643,16 @@ struct Compiler {
                 matcher->handle = handle;
             };
 
-            literal(TokenType::Global, "global");
-            literal(TokenType::Var, "var");
-            literal(TokenType::If, "if");
-            literal(TokenType::Else, "else");
-            literal(TokenType::While, "while");
-            literal(TokenType::Return, "return");
-            literal(TokenType::Boolean, "true");
-            literal(TokenType::Boolean, "false");
-            literal(TokenType::Nil, "nil");
-            literal(TokenType::Fn, "fn");
+            literalNeedingSeparator(TokenType::Global, "global");
+            literalNeedingSeparator(TokenType::Var, "var");
+            literalNeedingSeparator(TokenType::If, "if");
+            literalNeedingSeparator(TokenType::Else, "else");
+            literalNeedingSeparator(TokenType::While, "while");
+            literalNeedingSeparator(TokenType::Return, "return");
+            literalNeedingSeparator(TokenType::Boolean, "true");
+            literalNeedingSeparator(TokenType::Boolean, "false");
+            literalNeedingSeparator(TokenType::Nil, "nil");
+            literalNeedingSeparator(TokenType::Fn, "fn");
             literal(TokenType::Assign, "=");
             literal(TokenType::LeftParen, "(");
             literal(TokenType::RightParen, ")");
@@ -696,7 +732,7 @@ struct Compiler {
             }
             case TokenType::Return: {
                 tokenizer.PutBack(&current);
-                CompileWhileStatement(runtime);
+                CompileReturnStatement(runtime);
                 break;
             }
             default: {
@@ -707,14 +743,46 @@ struct Compiler {
         }
     }
 
+    void CompileReturnStatement(Runtime* runtime) {
+        tokenizer.Expect(runtime, TokenType::Return);
+        CompileExpression(runtime);
+        Integer top = CurrentContext()->StackTop();
+        CurrentContext()->StackPop();
+        CurrentContext()->Emit(runtime, ByteCodeType::Return, top);
+        tokenizer.Expect(runtime, TokenType::SemiColon);
+    }
+
     void CompileWhileStatement(Runtime* runtime) {
         Panic("TODO");
         (void)(runtime);
     }
 
     void CompileIfStatement(Runtime* runtime) {
-        Panic("TODO");
-        (void)(runtime);
+        tokenizer.Expect(runtime, TokenType::If);
+        CompileExpression(runtime);
+        Integer top = CurrentContext()->StackTop();
+        CurrentContext()->StackPop();
+        Integer jumpLocation = CurrentContext()->EmitLong(runtime, ByteCodeType::JumpIfFalse, top, Integer{0});
+        tokenizer.Expect(runtime, TokenType::LeftCurly);
+
+        // TODO: scope management
+        while (true) {
+            Token curr = tokenizer.Next();
+            if (curr.type == TokenType::RightCurly) {
+                tokenizer.PutBack(&curr);
+                break;
+            }
+            tokenizer.PutBack(&curr);
+            CompileStatement(runtime);
+        }
+
+        tokenizer.Expect(runtime, TokenType::RightCurly);
+
+        Integer endOfIfTrue = CurrentContext()->CurrentByteCodeLocation();
+        CurrentContext()->UpdateLong(runtime, jumpLocation, ByteCodeType::JumpIfFalse, top, endOfIfTrue);
+
+        // TODO: else if
+        // TODO: block as a sub component of statement?
     }
 
     void CompileExpressionStatement(Runtime* runtime) {
@@ -758,47 +826,48 @@ struct Compiler {
 
     void CompileExpression(Runtime* runtime) {
         Token current = tokenizer.Next();
+        tokenizer.PutBack(&current);
         switch (current.type) {
             case TokenType::Nil: {
-                tokenizer.PutBack(&current);
                 CompileNil(runtime);
                 return;
             }
             case TokenType::String: {
-                tokenizer.PutBack(&current);
                 CompileString(runtime);
                 return;
             }
             case TokenType::Integer: {
-                tokenizer.PutBack(&current);
                 CompileInteger(runtime);
                 return;
             }
             case TokenType::Double: {
-                tokenizer.PutBack(&current);
                 CompileDouble(runtime);
                 return;
             }
             case TokenType::Boolean: {
-                tokenizer.PutBack(&current);
                 CompileBoolean(runtime);
                 return;
             }
             case TokenType::Identifier: {
                 if (tokenizer.AtEof()) {
-                    tokenizer.PutBack(&current);
                     CompileIdentifier(runtime);
                 } else {
                     Token next = tokenizer.Next();
                     if (next.type == TokenType::LeftParen) {
-                        tokenizer.PutBack(&current);
                         tokenizer.PutBack(&next);
                         CompileInvoke(runtime);
                     } else {
-                        tokenizer.PutBack(&current);
                         CompileIdentifier(runtime);
                     }
                 }
+                return;
+            }
+            case TokenType::LeftParen: {
+                // regular parens which have no ompact on expression
+                // simply unwrap them
+                tokenizer.Expect(runtime, TokenType::LeftParen);
+                CompileExpression(runtime);
+                tokenizer.Expect(runtime, TokenType::RightParen);
                 return;
             }
             default: {

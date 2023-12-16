@@ -1,22 +1,35 @@
 
-var id1 = true;
 
-var id2 = 1;
+var local1 = 1;
 
-var id3 = true;
 
-var id4 = 150;
+global global1 = "globalvalue1";
 
-var patootoo = true;
 
-var tamootoo = "tamootoo";
+var local2 = 2;
 
-global potato = "ay wat that thing do";
 
-global yeetus1 = "yeetus2";
+global global2 = "globalvalue2";
 
-/* var blah = 5; */
 
-global yeetus3 = "yeetus4";
+var local3 = 3;
 
-global YeaBoi = 5.4;
+
+global global3 = "globalvalue3";
+
+420;
+"weeeee";
+true;
+false;
+nil;
+5.4;
+70;
+
+if (false) {
+    var b = 11111;
+}
+
+var a = 6;
+
+return 5;
+

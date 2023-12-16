@@ -266,6 +266,7 @@ void PrintByteCode(Runtime* rt, Function* fn, ByteCode* bc) {
         }
         case ByteCodeType::Return: {
             std::printf(fmt, "return");
+            std::printf("R%lld", bc->SmallArgument1().Unwrap());
             std::printf("\n");
             break;
         }

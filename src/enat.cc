@@ -68,7 +68,7 @@ static constexpr Entry ENTRIES[] = {
     {"endsWith", 3, 3, [](Runtime* rt) {
         String* haystack = rt->Local(Integer{1})->GetString(rt);
         String* needle = rt->Local(Integer{2})->GetString(rt);
-        
+
         if (needle->Length().Unwrap() > haystack->Length().Unwrap()) {
             rt->Local(Integer{0})->SetBoolean(false);
             return;
@@ -280,56 +280,56 @@ void PrintByteCode(Runtime* rt, Function* fn, ByteCode* bc) {
         case ByteCodeType::LoadGlobal: {
             std::printf(fmt, "loadg");
             std::printf(
-                "R%lld R%lld\n", 
+                "R%lld R%lld\n",
                 bc->SmallArgument1().Unwrap(), bc->SmallArgument2().Unwrap());
             break;
         }
         case ByteCodeType::Invoke: {
             std::printf(fmt, "invoke");
             std::printf(
-                "R%lld %lld\n", 
+                "R%lld %lld\n",
                 bc->SmallArgument1().Unwrap(), bc->SmallArgument2().Unwrap());
             break;
         }
         case ByteCodeType::Copy: {
             std::printf(fmt, "copy");
             std::printf(
-                "R%lld R%lld\n", 
+                "R%lld R%lld\n",
                 bc->SmallArgument1().Unwrap(), bc->SmallArgument2().Unwrap());
             break;
         }
         case ByteCodeType::Equal: {
             std::printf(fmt, "equal");
             std::printf(
-                "R%lld R%lld R%lld\n", 
+                "R%lld R%lld R%lld\n",
                 bc->SmallArgument1().Unwrap(), bc->SmallArgument2().Unwrap(), bc->SmallArgument3().Unwrap());
             break;
         }
         case ByteCodeType::Add: {
             std::printf(fmt, "add");
             std::printf(
-                "R%lld R%lld R%lld\n", 
+                "R%lld R%lld R%lld\n",
                 bc->SmallArgument1().Unwrap(), bc->SmallArgument2().Unwrap(), bc->SmallArgument3().Unwrap());
             break;
         }
         case ByteCodeType::Subtract: {
             std::printf(fmt, "sub");
             std::printf(
-                "R%lld R%lld R%lld\n", 
+                "R%lld R%lld R%lld\n",
                 bc->SmallArgument1().Unwrap(), bc->SmallArgument2().Unwrap(), bc->SmallArgument3().Unwrap());
             break;
         }
         case ByteCodeType::Multiply: {
             std::printf(fmt, "mult");
             std::printf(
-                "R%lld R%lld R%lld\n", 
+                "R%lld R%lld R%lld\n",
                 bc->SmallArgument1().Unwrap(), bc->SmallArgument2().Unwrap(), bc->SmallArgument3().Unwrap());
             break;
         }
         case ByteCodeType::JumpIfFalse: {
             std::printf(fmt, "jumpf");
             std::printf(
-                "R%lld %lld\n", 
+                "R%lld %lld\n",
                 bc->SmallArgument1().Unwrap(), bc->LargeArgument().Unwrap());
             break;
         }
@@ -341,21 +341,21 @@ void PrintByteCode(Runtime* rt, Function* fn, ByteCode* bc) {
         case ByteCodeType::StoreGlobal: {
             std::printf(fmt, "storeg");
             std::printf(
-                "R%lld R%lld\n", 
+                "R%lld R%lld\n",
                 bc->SmallArgument1().Unwrap(), bc->SmallArgument2().Unwrap());
             break;
         }
         case ByteCodeType::Not: {
             std::printf(fmt, "not");
             std::printf(
-                "R%lld\n", 
+                "R%lld\n",
                 bc->SmallArgument1().Unwrap());
             break;
         }
         case ByteCodeType::MapSet: {
             std::printf(fmt, "mapset");
             std::printf(
-                "R%lld R%lld R%lld\n", 
+                "R%lld R%lld R%lld\n",
                 bc->SmallArgument1().Unwrap(),
                 bc->SmallArgument2().Unwrap(),
                 bc->SmallArgument3().Unwrap());

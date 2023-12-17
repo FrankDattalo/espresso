@@ -1270,7 +1270,7 @@ void Runtime::Mark(Value* val) {
         default: {
             // std::printf("[GC] Mark UNKNOWN at %p\n", (void*) val);
             Panic("Unknown ValueType in Mark");
-            
+
         }
     }
 }

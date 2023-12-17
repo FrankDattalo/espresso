@@ -53,12 +53,12 @@ private:
 };
 
 /**
- * 
+ *
  * Grammar:
- * 
+ *
  * file
  *  | statement*
- * 
+ *
  * statement
  *  | "global" identifier "=" expression ";"
  *  | "var" identifier "=" expression ";"
@@ -66,7 +66,7 @@ private:
  *  | "while" expression "{" statement* "}"
  *  | "return" (expression)? ";"
  *  | expression ";"
- * 
+ *
  * expression
  *  | float
  *  | integer
@@ -76,7 +76,7 @@ private:
  *  | "nil"
  *  | "fn" "(" ( identifier ("," identifier )* )? ")" "{" statement* "}"
  *  | invoke
- * 
+ *
  * invoke
  *  | target "(" ( expression ( "," expression )* )? ")"
  *
@@ -84,7 +84,7 @@ private:
  *  | identifier
  *  | target "." identifier
  *  | "(" expression ")"
- * 
+ *
 */
 
 struct Compiler {
@@ -335,7 +335,7 @@ struct Compiler {
 
         Integer StartDefineLocal(Runtime* runtime, Token token) {
             Scope* scope = this->scopes.At(Integer{this->scopes.Length().Unwrap() - 1});
-            // TODO: locals size not needed b/c they are only ever allocated and 
+            // TODO: locals size not needed b/c they are only ever allocated and
             // freed in a strictly stack oriented manner
             if (scope->stackSize != 0) {
                 // compiler bug
@@ -515,7 +515,7 @@ struct Compiler {
         }
 
         void InitMatchers(Runtime* runtime) {
-            
+
             using CharFn = int(*)(int);
 
             Matcher::Handle literalNeedingSeparatorMatcher = [](Matcher* matcher, const char* source, std::int64_t length) -> std::int64_t {
@@ -609,7 +609,7 @@ struct Compiler {
                 }
                 return i;
             };
-            
+
             Matcher::Handle commentMatcher = [](Matcher* matcher, const char* source, std::int64_t length) -> std::int64_t {
                 (void)(matcher);
                 std::int64_t i = 0;
@@ -829,7 +829,7 @@ struct Compiler {
         Integer constantNumber = CurrentContext()->NewStringConstant(runtime, identifier.source, identifier.length);
         tokenizer.Expect(runtime, TokenType::Assign);
         CompileExpression(runtime);
-        // there should be something at the top of the stack that 
+        // there should be something at the top of the stack that
         // we will use as the value of the expression
         Integer globalValue = CurrentContext()->StackTop();
         Integer registerDest = CurrentContext()->StackPush(runtime);
@@ -961,7 +961,7 @@ struct Compiler {
             if (current.type == TokenType::RightParen) {
                 break;
             }
-        
+
             if (!firstParam) {
                 tokenizer.Expect(runtime, TokenType::Comma);
             }

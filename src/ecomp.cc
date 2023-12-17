@@ -8,47 +8,48 @@ namespace native {
 namespace compiler {
 
 template<typename T, std::int64_t N>
-class Deque {
+class Stack {
 public:
-    Deque()
-    : start{0}
-    , end{0}
+    Stack()
+    : next{0}
     {
         static_assert(N > 0);
     }
 
-    ~Deque() = default;
+    ~Stack() = default;
 
     void Put(T* src) {
         if (Length() == N) {
             Panic("Deque is full");
         }
-        *at(end) = *src;
-        end++;
+        items[next] = *src;
+        next++;
     }
 
     T Take() {
         if (Length() == 0) {
             Panic("Deque is empty");
         }
-        T result = *at(start);
-        start++;
+        next--;
+        T result = items[next];
         return result;
     }
 
     std::int64_t Length() const {
-        return end - start;
+        // -1 because next is points to the next free
+        if (next < 0) {
+            Panic("Stack underflow");
+        }
+        if (next > N) {
+            Panic("Stack overflow");
+        }
+        return next;
     }
 
 
 private:
-    T* at(std::int64_t idx) {
-        return &items[idx % N];
-    }
-
     T items[N];
-    std::int64_t start;
-    std::int64_t end;
+    std::int64_t next;
 };
 
 /**
@@ -111,6 +112,7 @@ struct Compiler {
         LeftParen,
         RightParen,
         Period,
+        Comma,
         LeftCurly,
         RightCurly,
         SemiColon,
@@ -138,6 +140,7 @@ struct Compiler {
             case TokenType::LeftParen: { return "LeftParen"; }
             case TokenType::RightParen: { return "RightParen"; }
             case TokenType::Period: { return "Period"; }
+            case TokenType::Comma: { return "Comma"; }
             case TokenType::LeftCurly: { return "LeftCurly"; }
             case TokenType::RightCurly: { return "RightCurly"; }
             case TokenType::SemiColon: { return "SemiColon"; }
@@ -400,7 +403,7 @@ struct Compiler {
         const char* string;
         std::int64_t length;
         std::int64_t index;
-        Deque<Token, 2> tokenBuffer;
+        Stack<Token, 2> tokenBuffer;
         Vector<Matcher> matchers;
 
         void Init(Runtime* runtime, String* source) {
@@ -409,7 +412,7 @@ struct Compiler {
             this->string = source->RawPointer();
             this->length = source->Length().Unwrap();
             this->index = 0;
-            this->tokenBuffer = Deque<Token, 2>();
+            this->tokenBuffer = Stack<Token, 2>();
             this->matchers.Init(runtime);
 
             InitMatchers(runtime);
@@ -671,6 +674,7 @@ struct Compiler {
             literal(TokenType::LeftCurly, "{");
             literal(TokenType::RightCurly, "}");
             literal(TokenType::SemiColon, ";");
+            literal(TokenType::Comma, ",");
             literal(TokenType::WhiteSpace, " ");
             literal(TokenType::WhiteSpace, "\t");
             literal(TokenType::WhiteSpace, "\r");
@@ -780,11 +784,10 @@ struct Compiler {
         tokenizer.Expect(runtime, TokenType::LeftCurly);
         while (true) {
             Token curr = tokenizer.Next();
+            tokenizer.PutBack(&curr);
             if (curr.type == TokenType::RightCurly) {
-                tokenizer.PutBack(&curr);
                 break;
             }
-            tokenizer.PutBack(&curr);
             CompileStatement(runtime);
         }
         tokenizer.Expect(runtime, TokenType::RightCurly);
@@ -855,31 +858,36 @@ struct Compiler {
 
     void CompileExpression(Runtime* runtime) {
         Token current = tokenizer.Next();
-        tokenizer.PutBack(&current);
         switch (current.type) {
             case TokenType::Nil: {
+                tokenizer.PutBack(&current);
                 CompileNil(runtime);
                 return;
             }
             case TokenType::String: {
+                tokenizer.PutBack(&current);
                 CompileString(runtime);
                 return;
             }
             case TokenType::Integer: {
+                tokenizer.PutBack(&current);
                 CompileInteger(runtime);
                 return;
             }
             case TokenType::Double: {
+                tokenizer.PutBack(&current);
                 CompileDouble(runtime);
                 return;
             }
             case TokenType::Boolean: {
+                tokenizer.PutBack(&current);
                 CompileBoolean(runtime);
                 return;
             }
             case TokenType::Identifier: {
                 Token next = tokenizer.Next();
                 tokenizer.PutBack(&next);
+                tokenizer.PutBack(&current);
                 if (next.type == TokenType::LeftParen) {
                     CompileInvoke(runtime);
                 } else {
@@ -934,8 +942,38 @@ struct Compiler {
     }
 
     void CompileInvoke(Runtime* runtime) {
-        Panic("TODO");
-        (void)(runtime);
+
+        Token start = tokenizer.Expect(runtime, TokenType::Identifier);
+        tokenizer.PutBack(&start);
+
+        std::int64_t argumentCount = 1;
+        CompileIdentifier(runtime);
+
+        Integer startRegister = CurrentContext()->StackTop();
+
+        tokenizer.Expect(runtime, TokenType::LeftParen);
+        bool firstParam = true;
+
+        while (true) {
+            Token current = tokenizer.Next();
+            tokenizer.PutBack(&current);
+
+            if (current.type == TokenType::RightParen) {
+                break;
+            }
+        
+            if (!firstParam) {
+                tokenizer.Expect(runtime, TokenType::Comma);
+            }
+
+            CompileExpression(runtime);
+            argumentCount++;
+            firstParam = false;
+        }
+
+        tokenizer.Expect(runtime, TokenType::RightParen);
+
+        CurrentContext()->Emit(runtime, ByteCodeType::Invoke, startRegister, Integer{argumentCount});
     }
 
     void CompileInteger(Runtime* runtime) {

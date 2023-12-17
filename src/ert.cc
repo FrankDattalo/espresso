@@ -251,7 +251,7 @@ void Runtime::Interpret() {
         Function* function = Local(Integer{0})->GetFunction(this);
         ByteCode* byteCode = function->ByteCodeAt(CurrentFrame()->ProgramCounter());
 
-        #if 1
+        #if 0
         espresso::native::debugger::Breakpoint(this);
         #endif
 
@@ -1316,13 +1316,13 @@ void Runtime::Sweep() {
 }
 
 void Runtime::Gc() {
-    Integer sizeBefore = this->bytesAllocated;
+    // Integer sizeBefore = this->bytesAllocated;
 
     if (this->bytesAllocated.Unwrap() < this->nextGc.Unwrap()) {
         return;
     }
 
-    std::printf("[GC] Starting: bytes allocating %lld > next gc %lld\n", this->bytesAllocated.Unwrap(), this->nextGc.Unwrap());
+    // std::printf("[GC] Starting: bytes allocating %lld > next gc %lld\n", this->bytesAllocated.Unwrap(), this->nextGc.Unwrap());
 
     this->Mark(this->globals);
 
@@ -1349,7 +1349,7 @@ void Runtime::Gc() {
 
     this->Sweep();
 
-    std::printf("[GC] Reclaimed: %llu -> %llu\n", sizeBefore.Unwrap(), this->bytesAllocated.Unwrap());
+    // std::printf("[GC] Reclaimed: %llu -> %llu\n", sizeBefore.Unwrap(), this->bytesAllocated.Unwrap());
 
     this->nextGc = Integer{2 * this->bytesAllocated.Unwrap()};
     if (this->nextGc.Unwrap() <= 0) {

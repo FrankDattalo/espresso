@@ -926,7 +926,7 @@ struct Compiler {
             // invalid local
             Integer constantNumber = CurrentContext()->NewStringConstant(runtime, ident.source, ident.length);
             CurrentContext()->EmitLong(runtime, ByteCodeType::LoadConstant, registerDest, constantNumber);
-            CurrentContext()->EmitLong(runtime, ByteCodeType::LoadGlobal, registerDest, registerDest);
+            CurrentContext()->Emit(runtime, ByteCodeType::LoadGlobal, registerDest, registerDest);
         } else {
             // valid local
             CurrentContext()->Emit(runtime, ByteCodeType::Copy, registerDest, localNumer);

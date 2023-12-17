@@ -143,7 +143,7 @@ void RegisterNatives(Runtime* rt) {
             rt->NewNativeFunction(
                 Integer{entry.arity}, Integer{entry.localCount}, entry.handle));
 
-        rt->DefineGlobal(Integer{0}, Integer{1});
+        rt->StoreGlobal(Integer{0}, Integer{1});
 
         // sanity check
         rt->Local(Integer{1})->GetNativeFunction(rt)->Verify(rt);

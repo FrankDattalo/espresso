@@ -587,8 +587,6 @@ public:
 
     void LoadConstant(Integer destLocalNumber, Integer sourceConstantNumber);
 
-    void DefineGlobal(Integer keyLocalNumber, Integer valueLocalNumber);
-
     void Copy(Integer destIndex, Integer sourceIndex);
 
     void Return(Integer sourceIndex);

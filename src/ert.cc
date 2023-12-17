@@ -531,12 +531,6 @@ NativeFunction::Handle NativeFunction::GetHandle() const {
     return this->handle;
 }
 
-void Runtime::DefineGlobal(Integer keyIndex, Integer valueIndex) {
-    Value* key = Local(keyIndex);
-    Value* value = Local(valueIndex);
-    globals->Put(this, key, value);
-}
-
 String* Runtime::NewString(const char* message, std::size_t givenLength) {
     // TODO: size converstion checking
     Integer length = Integer{static_cast<std::int64_t>(givenLength)};

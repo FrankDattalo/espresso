@@ -203,6 +203,17 @@ struct Compiler {
             scopes.DeInit(runtime);
         }
 
+        Integer ResolveLocal(Token* token) {
+            std::int64_t n = this->locals.Length().Unwrap();
+            for (std::int64_t i = 0; i < n; i++) {
+                Variable* var = this->locals.At(Integer{i});
+                if (0 == std::strncmp(var->token.source, token->source, var->token.length)) {
+                    return Integer{i};
+                }
+            }
+            return Integer{-1};
+        }
+
         Integer Emit(Runtime* runtime, ByteCodeType byteCodeType, Integer reg1, Integer reg2, Integer reg3) {
             std::uint32_t result = 0;
             result |= static_cast<std::uint32_t>(byteCodeType);
@@ -753,19 +764,20 @@ struct Compiler {
     }
 
     void CompileWhileStatement(Runtime* runtime) {
-        Panic("TODO");
-        (void)(runtime);
-    }
-
-    void CompileIfStatement(Runtime* runtime) {
-        tokenizer.Expect(runtime, TokenType::If);
+        tokenizer.Expect(runtime, TokenType::While);
+        Integer startOfWhile = CurrentContext()->CurrentByteCodeLocation();
         CompileExpression(runtime);
         Integer top = CurrentContext()->StackTop();
         CurrentContext()->StackPop();
-        Integer jumpLocation = CurrentContext()->EmitLong(runtime, ByteCodeType::JumpIfFalse, top, Integer{0});
-        tokenizer.Expect(runtime, TokenType::LeftCurly);
+        Integer jumpIfFalseLocation = CurrentContext()->EmitLong(runtime, ByteCodeType::JumpIfFalse, top, Integer{0});
+        CompileBlock(runtime);
+        CurrentContext()->EmitLong(runtime, ByteCodeType::Jump, Integer{0}, startOfWhile);
+        Integer endOfLoop = CurrentContext()->CurrentByteCodeLocation();
+        CurrentContext()->UpdateLong(runtime, jumpIfFalseLocation, ByteCodeType::JumpIfFalse, top, endOfLoop);
+    }
 
-        // TODO: scope management
+    void CompileBlock(Runtime* runtime) {
+        tokenizer.Expect(runtime, TokenType::LeftCurly);
         while (true) {
             Token curr = tokenizer.Next();
             if (curr.type == TokenType::RightCurly) {
@@ -775,14 +787,31 @@ struct Compiler {
             tokenizer.PutBack(&curr);
             CompileStatement(runtime);
         }
-
         tokenizer.Expect(runtime, TokenType::RightCurly);
+    }
 
-        Integer endOfIfTrue = CurrentContext()->CurrentByteCodeLocation();
-        CurrentContext()->UpdateLong(runtime, jumpLocation, ByteCodeType::JumpIfFalse, top, endOfIfTrue);
+    void CompileIfStatement(Runtime* runtime) {
+        tokenizer.Expect(runtime, TokenType::If);
+        CompileExpression(runtime);
+        Integer top = CurrentContext()->StackTop();
+        CurrentContext()->StackPop();
+        Integer jumpIfFalseLocation = CurrentContext()->EmitLong(runtime, ByteCodeType::JumpIfFalse, top, Integer{0});
+        CompileBlock(runtime);
 
-        // TODO: else if
-        // TODO: block as a sub component of statement?
+        Token curr = tokenizer.Next();
+        tokenizer.PutBack(&curr);
+        if (curr.type == TokenType::Else) {
+            tokenizer.Expect(runtime, TokenType::Else);
+            Integer jumpAfterIfTrue = CurrentContext()->EmitLong(runtime, ByteCodeType::Jump, Integer{0}, Integer{0});
+            Integer endOfIfTrue = CurrentContext()->CurrentByteCodeLocation();
+            CompileBlock(runtime);
+            Integer endOfIfFalse = CurrentContext()->CurrentByteCodeLocation();
+            CurrentContext()->UpdateLong(runtime, jumpIfFalseLocation, ByteCodeType::JumpIfFalse, top, endOfIfTrue);
+            CurrentContext()->UpdateLong(runtime, jumpAfterIfTrue, ByteCodeType::Jump, Integer{0}, endOfIfFalse);
+        } else {
+            Integer endOfIfTrue = CurrentContext()->CurrentByteCodeLocation();
+            CurrentContext()->UpdateLong(runtime, jumpIfFalseLocation, ByteCodeType::JumpIfFalse, top, endOfIfTrue);
+        }
     }
 
     void CompileExpressionStatement(Runtime* runtime) {
@@ -849,16 +878,12 @@ struct Compiler {
                 return;
             }
             case TokenType::Identifier: {
-                if (tokenizer.AtEof()) {
-                    CompileIdentifier(runtime);
+                Token next = tokenizer.Next();
+                tokenizer.PutBack(&next);
+                if (next.type == TokenType::LeftParen) {
+                    CompileInvoke(runtime);
                 } else {
-                    Token next = tokenizer.Next();
-                    if (next.type == TokenType::LeftParen) {
-                        tokenizer.PutBack(&next);
-                        CompileInvoke(runtime);
-                    } else {
-                        CompileIdentifier(runtime);
-                    }
+                    CompileIdentifier(runtime);
                 }
                 return;
             }
@@ -892,8 +917,20 @@ struct Compiler {
     }
 
     void CompileIdentifier(Runtime* runtime) {
-        Panic("TODO");
-        (void)(runtime);
+        Token ident = tokenizer.Expect(runtime, TokenType::Identifier);
+        Context* context = CurrentContext();
+        // TODO: closure resolution
+        Integer localNumer = context->ResolveLocal(&ident);
+        Integer registerDest = CurrentContext()->StackPush(runtime);
+        if (localNumer.Unwrap() < 0) {
+            // invalid local
+            Integer constantNumber = CurrentContext()->NewStringConstant(runtime, ident.source, ident.length);
+            CurrentContext()->EmitLong(runtime, ByteCodeType::LoadConstant, registerDest, constantNumber);
+            CurrentContext()->EmitLong(runtime, ByteCodeType::LoadGlobal, registerDest, registerDest);
+        } else {
+            // valid local
+            CurrentContext()->Emit(runtime, ByteCodeType::Copy, registerDest, localNumer);
+        }
     }
 
     void CompileInvoke(Runtime* runtime) {

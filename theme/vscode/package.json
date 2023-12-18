@@ -1,0 +1,25 @@
+{
+    "name": "espresso",
+    "displayName": "espresso",
+    "description": "The espresso programming language",
+    "version": "0.0.1",
+    "engines": {
+        "vscode": "^1.40.0"
+    },
+    "categories": [
+        "Programming Languages"
+    ],
+    "contributes": {
+        "languages": [{
+            "id": "espresso",
+            "aliases": ["espresso"],
+            "extensions": [".espresso"],
+            "configuration": "./language-configuration.json"
+        }],
+        "grammars": [{
+            "language": "espresso",
+            "scopeName": "source.espresso",
+            "path": "./syntaxes/theme.json"
+        }]
+    }
+}

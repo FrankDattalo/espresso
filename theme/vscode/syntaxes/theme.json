@@ -1,0 +1,57 @@
+{
+    "scopeName": "source.espresso",
+    "patterns": [
+      { "include": "#comment" },
+      { "include": "#literal" },
+      { "include": "#keywordControl" },
+      { "include": "#keywordNonControl" },
+      { "include": "#identifier" }
+    ],
+    "repository": {
+      "comment": {
+        "match": "/\\*.*\\*/",
+        "name": "comment.line.number-sign.espresso"
+      },
+      "literal": {
+        "patterns": [
+          { "include": "#integer" },
+          { "include": "#float" },
+          { "include": "#nil" },
+          { "include": "#string" },
+          { "include": "#boolean" }
+        ]
+      },
+      "integer": {
+        "match": "(0|[1-9][0-9]*)",
+        "name": "constant.language.numeric.espresso"
+      },
+      "float": {
+        "match": "(0|[1-9][0-9]*)\\.[0-9]+",
+        "name": "constant.language.numeric.espresso"
+      },
+      "nil": {
+        "match": "nil",
+        "name": "constant.language.nil.espresso"
+      },
+      "string": {
+        "match": "\"[^\n\"]*\"",
+        "name": "string.quoted.double.espresso"
+      },
+      "boolean": {
+        "match": "\\b(true|false)\\b",
+        "name": "constant.language.boolean.espresso"
+      },
+      "identifier": {
+        "match": "[_a-zA-Z][_a-zA-Z0-9]*",
+        "name": "variable.other.espresso"
+      },
+      "keywordControl": {
+        "match": "\\b(if|else|while|break|return)\\b",
+        "name": "keyword.control.espresso"
+      },
+      "keywordNonControl": {
+        "match": "\\b(global|fn|var)\\b",
+        "name": "keyword.other.espresso"
+      }
+    }
+  }

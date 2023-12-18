@@ -1,0 +1,19 @@
+
+var x = false;
+
+var y = 2;
+var z = 3;
+
+if x {
+    print(y);
+} else {
+    print(z);
+}
+
+return 1;
+
+global z = "true";
+
+while true {
+
+}

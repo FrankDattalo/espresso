@@ -24,17 +24,21 @@ const char* ThrowException::what() const noexcept {
     return "Espresso Exception";
 }
 
-void Runtime::Init(System* system) {
+void Runtime::Init(System* system, const char* loadPath) {
+    this->gcEnabled = false;
+
     this->system = system;
     this->heap = nullptr;
     this->globals = nullptr;
+    this->loadPath = nullptr;
     this->bytesAllocated = Integer{0};
     this->nextGc = Integer{128};
 
     this->stack.Init(this);
     this->frames.Init(this);
 
-    globals = this->NewMap();
+    this->globals = this->NewMap();
+    this->loadPath = this->NewMap();
 
     CallFrame* initialFrame = this->frames.Push(this);
     initialFrame->Init(Integer{0}, Integer{4});
@@ -44,9 +48,47 @@ void Runtime::Init(System* system) {
     this->stack.Push(this)->SetNil();
     this->stack.Push(this)->SetNil();
 
+    // parse the load path
+    std::int64_t loadPathIndex = 0;
+    std::size_t loadPathLength = std::strlen(loadPath);
+    std::size_t currentLoadPathStart = 0;
+    for (std::size_t i = 0; i < loadPathLength; i++) {
+        const char curr = loadPath[i];
+
+        if (curr != ':') {
+            continue;
+        }
+
+        const char* loadPathEntry = &loadPath[currentLoadPathStart];
+        std::size_t length = i - currentLoadPathStart;
+
+        if (length == 0) {
+            Panic("Invalid load path format");
+        }
+
+        const char prev = loadPathEntry[length - 1];
+        if (prev == '/' || prev == '\\') {
+            Panic("Invalid load path format");
+        }
+    
+        Local(Integer{0})->SetString(NewString(loadPathEntry, length));
+        Value* value = Local(Integer{0});
+        Value key;
+        key.SetInteger(Integer{loadPathIndex});
+
+        this->loadPath->Put(this, &key, value);
+
+        currentLoadPathStart = i + 1;
+        loadPathIndex++;
+        i++;
+    }
+
     // load natives
     Local(Integer{0})->SetNativeFunction(NewNativeFunction(Integer{1}, Integer{2}, espresso::native::RegisterNatives));
     Invoke(Integer{0}, Integer{1});
+
+
+    this->gcEnabled = true;
 }
 
 void Runtime::DeInit() {
@@ -59,6 +101,10 @@ void Runtime::DeInit() {
         curr = curr->GetNext();
         toDeInit->DeInit(this);
     }
+}
+
+Map* Runtime::GetLoadPath() const {
+    return this->loadPath;
 }
 
 System* Runtime::GetSystem() {
@@ -1316,6 +1362,10 @@ void Runtime::Sweep() {
 }
 
 void Runtime::Gc() {
+    if (!this->gcEnabled) {
+        return;
+    }
+
     // Integer sizeBefore = this->bytesAllocated;
 
     if (this->bytesAllocated.Unwrap() < this->nextGc.Unwrap()) {
@@ -1325,6 +1375,8 @@ void Runtime::Gc() {
     // std::printf("[GC] Starting: bytes allocating %lld > next gc %lld\n", this->bytesAllocated.Unwrap(), this->nextGc.Unwrap());
 
     this->Mark(this->globals);
+
+    this->Mark(this->loadPath);
 
     // std::printf("[GC] Done Marking Globals\n");
 

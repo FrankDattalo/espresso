@@ -7,7 +7,7 @@ namespace espresso {
 
 class Espresso {
 public:
-    Espresso(System* system);
+    Espresso(System* system, const char* loadPath);
     ~Espresso();
 
     Espresso(const Espresso&) = delete;

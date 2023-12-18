@@ -548,7 +548,7 @@ public:
     Runtime() = default;
     ~Runtime() = default;
 
-    void Init(System* system);
+    void Init(System* system, const char* loadPath);
     void DeInit();
 
     Runtime(const Runtime&) = delete;
@@ -623,6 +623,8 @@ public:
 
     void Sweep();
 
+    Map* GetLoadPath() const;
+
 private:
     System* system{nullptr};
     Vector<CallFrame> frames;
@@ -631,6 +633,8 @@ private:
     Object* heap{nullptr};
     Integer bytesAllocated{0};
     Integer nextGc{0};
+    Map* loadPath{nullptr};
+    bool gcEnabled{false};
 };
 
 class RuntimeDefer {

@@ -974,6 +974,15 @@ struct Compiler {
         tokenizer.Expect(runtime, TokenType::RightParen);
 
         CurrentContext()->Emit(runtime, ByteCodeType::Invoke, startRegister, Integer{argumentCount});
+
+        if (CurrentContext()->StackTop().Unwrap() < startRegister.Unwrap()) {
+            Panic("Invalid register handling in invoke");
+        }
+
+        // ensure all but result get popped
+        while (CurrentContext()->StackTop().Unwrap() > startRegister.Unwrap()) {
+            CurrentContext()->StackPop();
+        }
     }
 
     void CompileInteger(Runtime* runtime) {

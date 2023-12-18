@@ -3,10 +3,10 @@
 
 namespace espresso {
 
-Espresso::Espresso(System* system) {
+Espresso::Espresso(System* system, const char* loadPath) {
     this->impl = system->ReAllocate(nullptr, 0, sizeof(Runtime));
     Runtime* rt = static_cast<Runtime*>(this->impl);
-    rt->Init(system);
+    rt->Init(system, loadPath);
 }
 
 Espresso::~Espresso() {

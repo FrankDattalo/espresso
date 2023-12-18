@@ -2,12 +2,12 @@
 
 int main(int argc, char** argv) {
 
-    if (argc != 3) {
+    if (argc != 2) {
         return 1;
     }
 
-    const char* loadPath = argv[1];
-    const char* fileName = argv[2];
+    const char* loadPath = ".;";
+    const char* fileName = argv[1];
 
     espresso::DefaultSystem system;
     espresso::Espresso espresso{&system, loadPath};

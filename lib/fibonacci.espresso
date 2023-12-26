@@ -1,0 +1,24 @@
+var fibonacci = fn(n) {
+    var prev = 1;
+    var curr = 1;
+    var iter = 1;
+    while (lessThan(iter, n)) {
+        var temp = curr;
+        curr = add(curr, prev);
+        prev = temp;
+        iter = add(iter, 1);
+    }
+    return curr;
+};
+
+print(fibonacci( 1));
+print(fibonacci( 2));
+print(fibonacci( 3));
+print(fibonacci( 4));
+print(fibonacci( 5));
+print(fibonacci( 6));
+print(fibonacci( 7));
+print(fibonacci( 8));
+print(fibonacci( 9));
+print(fibonacci(10));
+print(fibonacci(11));

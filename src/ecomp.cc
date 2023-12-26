@@ -770,8 +770,14 @@ struct Compiler {
                 break;
             }
             default: {
+                Token next = tokenizer.Next();
+                tokenizer.PutBack(&next);
                 tokenizer.PutBack(&current);
-                CompileExpressionStatement(runtime);
+                if (current.type == TokenType::Identifier && next.type == TokenType::Assign) {
+                    CompileAssignStatment(runtime);
+                } else {
+                    CompileExpressionStatement(runtime);
+                }
                 break;
             }
         }
@@ -858,6 +864,22 @@ struct Compiler {
         CurrentContext()->StackPop(); // value
         CurrentContext()->Emit(runtime, ByteCodeType::StoreGlobal, globalKey, globalValue);
         tokenizer.Expect(runtime, TokenType::SemiColon);
+    }
+
+    void CompileAssignStatment(Runtime* runtime) {
+        Token identifier = tokenizer.Expect(runtime, TokenType::Identifier);
+        Integer localNumber = CurrentContext()->ResolveLocal(&identifier);
+        if (localNumber.Unwrap() < 0) {
+            runtime->Local(Integer{0})->SetString(runtime->NewString("Undefined local"));
+            runtime->Throw(Integer{0});
+            return;
+        }
+        tokenizer.Expect(runtime, TokenType::Assign);
+        CompileExpression(runtime);
+        Integer top = CurrentContext()->StackTop();
+        CurrentContext()->StackPop();
+        tokenizer.Expect(runtime, TokenType::SemiColon);
+        CurrentContext()->Emit(runtime, ByteCodeType::Copy, localNumber, top);
     }
 
     void CompileVarStatement(Runtime* runtime) {

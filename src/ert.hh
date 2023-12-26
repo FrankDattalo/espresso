@@ -490,6 +490,8 @@ public:
 
     void Push(Runtime* rt, String* other);
 
+    void Push(Runtime* rt, const char* other);
+
     void Reserve(Runtime* rt, Integer val);
 
     const char* RawPointer() const;

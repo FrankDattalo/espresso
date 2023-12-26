@@ -9,12 +9,13 @@
 12. Nicer error messages in compiler
 13. Location tracking in compiler
 14. Field access get/set. On invoke, expressions, and assignment.
-15. Assignment statement.
 16. Object hierarchy.
 17. Method resolution?
 18. Mapget instruction for field access
 19. Test coverage
 20. Remove builtin opcodes for math?
+21. Nested scopes / shadowing
+22. Redefinition of locals?
 
 # Done
 
@@ -23,3 +24,4 @@
 4. Gc
 5. Nicer error messages
 6. Bytecode verifier
+15. Assignment statement.

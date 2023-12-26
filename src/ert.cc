@@ -764,11 +764,13 @@ void Runtime::LoadGlobal(Integer destIndex, Integer keyIndex) {
     if (result != nullptr) {
         dest->Copy(result);
         return;
-    } else {
-        dest->SetNil();
     }
 
-    this->Local(Integer{0})->SetString(this->NewString("Undefined Global"));
+    this->Local(Integer{0})->SetString(this->NewString(""));
+    String* str = this->Local(Integer{0})->GetString(this);
+    str->Push(this, "Undefined Global: ");
+    str->Push(this, key->GetString(this));
+    str->Push(this, '\0');
     this->Throw(Integer{0});
 }
 
@@ -880,6 +882,15 @@ bool String::Equals(String* other) const {
 
 void String::Push(Runtime* rt, char c) {
     *this->data.Push(rt) = c;
+}
+
+void String::Push(Runtime* rt, const char* chars) {
+    std::int64_t index = 0;
+    while (chars[index] != '\0') {
+        char c = chars[index];
+        Push(rt, c);
+        index++;
+    }
 }
 
 void String::Push(Runtime* rt, String* other) {

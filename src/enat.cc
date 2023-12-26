@@ -150,10 +150,40 @@ static constexpr Entry ENTRIES[] = {
         bool result = v1 <= v2;
         rt->Local(Integer{0})->SetBoolean(result);
     }},
+    {"greaterThanOrEqual", 3, 3, [](Runtime* rt) {
+        std::int64_t v1 = rt->Local(Integer{1})->GetInteger(rt).Unwrap();
+        std::int64_t v2 = rt->Local(Integer{2})->GetInteger(rt).Unwrap();
+        bool result = v1 >= v2;
+        rt->Local(Integer{0})->SetBoolean(result);
+    }},
+    {"lessThan", 3, 3, [](Runtime* rt) {
+        std::int64_t v1 = rt->Local(Integer{1})->GetInteger(rt).Unwrap();
+        std::int64_t v2 = rt->Local(Integer{2})->GetInteger(rt).Unwrap();
+        bool result = v1 < v2;
+        rt->Local(Integer{0})->SetBoolean(result);
+    }},
+    {"greaterThan", 3, 3, [](Runtime* rt) {
+        std::int64_t v1 = rt->Local(Integer{1})->GetInteger(rt).Unwrap();
+        std::int64_t v2 = rt->Local(Integer{2})->GetInteger(rt).Unwrap();
+        bool result = v1 > v2;
+        rt->Local(Integer{0})->SetBoolean(result);
+    }},
+    {"subtract", 3, 3, [](Runtime* rt) {
+        std::int64_t v1 = rt->Local(Integer{1})->GetInteger(rt).Unwrap();
+        std::int64_t v2 = rt->Local(Integer{2})->GetInteger(rt).Unwrap();
+        std::int64_t result = v1 - v2;
+        rt->Local(Integer{0})->SetInteger(Integer{result});
+    }},
     {"multiply", 3, 3, [](Runtime* rt) {
         std::int64_t v1 = rt->Local(Integer{1})->GetInteger(rt).Unwrap();
         std::int64_t v2 = rt->Local(Integer{2})->GetInteger(rt).Unwrap();
         std::int64_t result = v1 * v2;
+        rt->Local(Integer{0})->SetInteger(Integer{result});
+    }},
+    {"add", 3, 3, [](Runtime* rt) {
+        std::int64_t v1 = rt->Local(Integer{1})->GetInteger(rt).Unwrap();
+        std::int64_t v2 = rt->Local(Integer{2})->GetInteger(rt).Unwrap();
+        std::int64_t result = v1 + v2;
         rt->Local(Integer{0})->SetInteger(Integer{result});
     }},
     {"subtract", 3, 3, [](Runtime* rt) {

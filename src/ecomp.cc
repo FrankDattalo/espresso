@@ -289,9 +289,21 @@ struct Compiler {
             }
         }
 
+        Value* ConstantAt(Integer index) {
+            return destination->ConstantAt(index);
+        }
+
         Integer NewBooleanConstant(Runtime* runtime, bool value) {
             Integer id = destination->GetConstantCount();
             destination->PushConstant(runtime)->SetBoolean(value);
+            return id;
+        }
+
+        Integer NewFunctionConstant(Runtime* runtime) {
+            Integer id = destination->GetConstantCount();
+            destination->PushConstant(runtime)->SetNil();
+            Function* fn = runtime->NewFunction();
+            destination->ConstantAt(id)->SetFunction(fn);
             return id;
         }
 
@@ -331,6 +343,13 @@ struct Compiler {
                 this->registerCount = RegisterCount().Unwrap();
             }
             return Integer{dest};
+        }
+
+        Integer DefineParameter(Runtime* runtime, Token token) {
+            Integer localId = StartDefineLocal(runtime, token);
+            FinishDefineLocal(runtime, localId);
+            this->argumentCount++;
+            return localId;
         }
 
         Integer StartDefineLocal(Runtime* runtime, Token token) {
@@ -856,6 +875,42 @@ struct Compiler {
         tokenizer.Expect(runtime, TokenType::SemiColon);
     }
 
+    void CompileFunction(Runtime* runtime) {
+        Integer destStackAddress = CurrentContext()->StackPush(runtime);
+        Integer functionConstantId = CurrentContext()->NewFunctionConstant(runtime);
+        Function* functionDest = CurrentContext()->ConstantAt(functionConstantId)->GetFunction(runtime);
+        PushContext(runtime)->Init(runtime, functionDest);
+        tokenizer.Expect(runtime, TokenType::Fn);
+        tokenizer.Expect(runtime, TokenType::LeftParen);
+        bool first = true;
+        while (true) {
+            Token curr = tokenizer.Next();
+            tokenizer.PutBack(&curr);
+            if (curr.type == TokenType::EndOfFile || curr.type == TokenType::RightParen) {
+                break;
+            }
+            if (!first) {
+                tokenizer.Expect(runtime, TokenType::Comma);
+            }
+            Token ident = tokenizer.Expect(runtime, TokenType::Identifier);
+            first = false;
+            CurrentContext()->DefineParameter(runtime, ident);
+        }
+        tokenizer.Expect(runtime, TokenType::RightParen);
+        tokenizer.Expect(runtime, TokenType::LeftCurly);
+        while (true) {
+            Token curr = tokenizer.Next();
+            tokenizer.PutBack(&curr);
+            if (curr.type == TokenType::EndOfFile || curr.type == TokenType::RightCurly) {
+                break;
+            }
+            CompileStatement(runtime);
+        }
+        tokenizer.Expect(runtime, TokenType::RightCurly);
+        PopContext(runtime);
+        CurrentContext()->EmitLong(runtime, ByteCodeType::LoadConstant, destStackAddress, functionConstantId);
+    }
+
     void CompileExpression(Runtime* runtime) {
         Token current = tokenizer.Next();
         switch (current.type) {
@@ -898,9 +953,15 @@ struct Compiler {
             case TokenType::LeftParen: {
                 // regular parens which have no ompact on expression
                 // simply unwrap them
-                tokenizer.Expect(runtime, TokenType::LeftParen);
+                // left paren already read
                 CompileExpression(runtime);
                 tokenizer.Expect(runtime, TokenType::RightParen);
+                return;
+            }
+            case TokenType::Fn: {
+                // function definition
+                tokenizer.PutBack(&current);
+                CompileFunction(runtime);
                 return;
             }
             default: {

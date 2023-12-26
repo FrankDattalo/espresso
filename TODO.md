@@ -14,6 +14,7 @@
 17. Method resolution?
 18. Mapget instruction for field access
 19. Test coverage
+20. Remove builtin opcodes for math?
 
 # Done
 

@@ -1,0 +1,10 @@
+global factorial = fn(x) {
+    if (lessThanOrEqual(x, 0)) {
+        return 1;
+    }
+    return multiply(x, factorial(subtract(x, 1)));
+};
+
+var result = factorial(5);
+
+print(result);

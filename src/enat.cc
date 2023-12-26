@@ -144,6 +144,24 @@ static constexpr Entry ENTRIES[] = {
         Integer absoluteIndex = rt->CurrentFrame()->AbsoluteIndex(Integer{1});
         throw ThrowException{absoluteIndex};
     }},
+    {"lessThanOrEqual", 3, 3, [](Runtime* rt) {
+        std::int64_t v1 = rt->Local(Integer{1})->GetInteger(rt).Unwrap();
+        std::int64_t v2 = rt->Local(Integer{2})->GetInteger(rt).Unwrap();
+        bool result = v1 <= v2;
+        rt->Local(Integer{0})->SetBoolean(result);
+    }},
+    {"multiply", 3, 3, [](Runtime* rt) {
+        std::int64_t v1 = rt->Local(Integer{1})->GetInteger(rt).Unwrap();
+        std::int64_t v2 = rt->Local(Integer{2})->GetInteger(rt).Unwrap();
+        std::int64_t result = v1 * v2;
+        rt->Local(Integer{0})->SetInteger(Integer{result});
+    }},
+    {"subtract", 3, 3, [](Runtime* rt) {
+        std::int64_t v1 = rt->Local(Integer{1})->GetInteger(rt).Unwrap();
+        std::int64_t v2 = rt->Local(Integer{2})->GetInteger(rt).Unwrap();
+        std::int64_t result = v1 - v2;
+        rt->Local(Integer{0})->SetInteger(Integer{result});
+    }},
 };
 
 void RegisterNatives(Runtime* rt) {

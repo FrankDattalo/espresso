@@ -23,6 +23,7 @@ output_tests: build asm
 	diff <( ./build/espresso ./lib/helloworld.espresso ) <( cat ./test/output/helloworld.txt )
 	diff <( ./build/espresso ./lib/factorial.espresso ) <( cat ./test/output/factorial.txt )
 	diff <( ./build/espresso ./lib/fibonacci.espresso ) <( cat ./test/output/fibonacci.txt )
+	diff <( ./build/espresso ./lib/add3.espresso ) <( cat ./test/output/add3.txt )
 
 test: build output_tests
 #cd build && CTEST_OUTPUT_ON_FAILURE=TRUE make test

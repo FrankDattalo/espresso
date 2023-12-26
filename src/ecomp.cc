@@ -210,6 +210,9 @@ struct Compiler {
             std::int64_t n = this->locals.Length().Unwrap();
             for (std::int64_t i = 0; i < n; i++) {
                 Variable* var = this->locals.At(Integer{i});
+                if (var->token.length != token->length) {
+                    continue;
+                }
                 if (0 == std::strncmp(var->token.source, token->source, var->token.length)) {
                     return Integer{i};
                 }

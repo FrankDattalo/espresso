@@ -16,6 +16,7 @@
 20. Remove builtin opcodes for math?
 21. Nested scopes / shadowing
 22. Redefinition of locals?
+23. Module loading once, path normalization
 
 # Done
 

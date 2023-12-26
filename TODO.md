@@ -17,6 +17,8 @@
 21. Nested scopes / shadowing
 22. Redefinition of locals?
 23. Module loading once, path normalization
+24. Running with valgrind to track memory leaks
+25. Avoid c++ exceptions for language level exceptions?
 
 # Done
 

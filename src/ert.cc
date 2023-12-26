@@ -38,7 +38,7 @@ void Runtime::Init(System* system, const char* loadPath) {
     this->frames.Init(this);
 
     this->globals = this->NewMap();
-    this->loadPath = this->NewMap();
+    this->loadPath = this->NewString(loadPath);
 
     CallFrame* initialFrame = this->frames.Push(this);
     initialFrame->Init(Integer{0}, Integer{4});
@@ -48,45 +48,9 @@ void Runtime::Init(System* system, const char* loadPath) {
     this->stack.Push(this)->SetNil();
     this->stack.Push(this)->SetNil();
 
-    // parse the load path
-    std::int64_t loadPathIndex = 0;
-    std::size_t loadPathLength = std::strlen(loadPath);
-    std::size_t currentLoadPathStart = 0;
-    for (std::size_t i = 0; i < loadPathLength; i++) {
-        const char curr = loadPath[i];
-
-        if (curr != ':') {
-            continue;
-        }
-
-        const char* loadPathEntry = &loadPath[currentLoadPathStart];
-        std::size_t length = i - currentLoadPathStart;
-
-        if (length == 0) {
-            Panic("Invalid load path format");
-        }
-
-        const char prev = loadPathEntry[length - 1];
-        if (prev == '/' || prev == '\\') {
-            Panic("Invalid load path format");
-        }
-    
-        Local(Integer{0})->SetString(NewString(loadPathEntry, length));
-        Value* value = Local(Integer{0});
-        Value key;
-        key.SetInteger(Integer{loadPathIndex});
-
-        this->loadPath->Put(this, &key, value);
-
-        currentLoadPathStart = i + 1;
-        loadPathIndex++;
-        i++;
-    }
-
     // load natives
     Local(Integer{0})->SetNativeFunction(NewNativeFunction(Integer{1}, Integer{2}, espresso::native::RegisterNatives));
     Invoke(Integer{0}, Integer{1});
-
 
     this->gcEnabled = true;
 }
@@ -103,7 +67,7 @@ void Runtime::DeInit() {
     }
 }
 
-Map* Runtime::GetLoadPath() const {
+String* Runtime::GetLoadPath() const {
     return this->loadPath;
 }
 
@@ -916,6 +880,14 @@ bool String::Equals(String* other) const {
 
 void String::Push(Runtime* rt, char c) {
     *this->data.Push(rt) = c;
+}
+
+void String::Push(Runtime* rt, String* other) {
+    std::int64_t len = other->Length().Unwrap();
+    for (std::int64_t i = 0; i < len; i++) {
+        char c = other->At(Integer{i});
+        this->Push(rt, c);
+    }
 }
 
 void String::Clear() {

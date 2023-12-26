@@ -6,7 +6,7 @@ int main(int argc, char** argv) {
         return 1;
     }
 
-    const char* loadPath = ".;";
+    const char* loadPath = ".";
     const char* fileName = argv[1];
 
     espresso::DefaultSystem system;

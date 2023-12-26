@@ -488,6 +488,8 @@ public:
 
     void Push(Runtime* rt, char c);
 
+    void Push(Runtime* rt, String* other);
+
     void Reserve(Runtime* rt, Integer val);
 
     const char* RawPointer() const;
@@ -623,7 +625,7 @@ public:
 
     void Sweep();
 
-    Map* GetLoadPath() const;
+    String* GetLoadPath() const;
 
 private:
     System* system{nullptr};
@@ -633,7 +635,7 @@ private:
     Object* heap{nullptr};
     Integer bytesAllocated{0};
     Integer nextGc{0};
-    Map* loadPath{nullptr};
+    String* loadPath{nullptr};
     bool gcEnabled{false};
 };
 

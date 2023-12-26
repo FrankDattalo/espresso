@@ -103,11 +103,16 @@ static constexpr Entry ENTRIES[] = {
         rt->Invoke(Integer{2}, Integer{3});
         bool isSourceFile = rt->Local(Integer{2})->GetBoolean(rt);
 
-        // TODO: load from load path
-        // String* requestedFile = rt->Local(Integer{1})->GetString(rt);
-        // rt->Local(Integer{4})->SetString(rt->NewString(""));
-        // String* str = rt->Local(Integer{4})->GetString(rt);
-        // 
+        String* requestedFile = rt->Local(Integer{1})->GetString(rt);
+        rt->Local(Integer{4})->SetString(rt->NewString(""));
+        String* str = rt->Local(Integer{4})->GetString(rt);
+        str->Clear();
+        str->Push(rt, rt->GetLoadPath());
+        // TODO: normalization of string
+        str->Push(rt, '/');
+        str->Push(rt, requestedFile);
+        str->Push(rt, '\0');
+        rt->Copy(Integer{1}, Integer{4});
 
         rt->Local(Integer{0})->SetString(rt->NewString("readFile"));
         rt->LoadGlobal(Integer{0}, Integer{0});

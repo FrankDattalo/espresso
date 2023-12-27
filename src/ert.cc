@@ -1323,18 +1323,24 @@ void Runtime::Sweep() {
 
         // 1. start of heap
         if (obj == this->heap) {
-            // std::printf("[GC] Free(front) %p\n", (void*) obj);
+            #ifdef ESPRESSO_GC_DEBUG
+            std::printf("[GC] Free(front) %p\n", (void*) obj);
+            #endif
             this->heap = next;
         // 2. end of heap
         } else if (next == nullptr) {
-            // std::printf("[GC] Free(end) %p\n", (void*) obj);
+            #ifdef ESPRESSO_GC_DEBUG
+            std::printf("[GC] Free(end) %p\n", (void*) obj);
+            #endif
             prev = nullptr;
         // 3. middle of heap
         } else if (obj != this->heap && next != nullptr) {
             // prev should never be null here because at some
             // point we must have found a valid object at the start
             // of the heap otherwise we never would have gotten here
-            // std::printf("[GC] Free(middle) %p\n", (void*) obj);
+            #ifdef ESPRESSO_GC_DEBUG
+            std::printf("[GC] Free(middle) %p\n", (void*) obj);
+            #endif
             prev->SetNext(next);
         } else {
             Panic("Unhandled case on gc sweep");
@@ -1349,13 +1355,21 @@ void Runtime::Gc() {
         return;
     }
 
-    // Integer sizeBefore = this->bytesAllocated;
+    #ifdef ESPRESSO_GC_DEBUG
+    Integer sizeBefore = this->bytesAllocated;
+    #endif
 
+    #ifdef ESPRESSO_GC_DEBUG
+    std::printf("\n[GC] Debug Gc\n");
+    #else
     if (this->bytesAllocated.Unwrap() < this->nextGc.Unwrap()) {
         return;
     }
+    #endif
 
-    // std::printf("[GC] Starting: bytes allocating %lld > next gc %lld\n", this->bytesAllocated.Unwrap(), this->nextGc.Unwrap());
+    #ifdef ESPRESSO_GC_DEBUG
+    std::printf("[GC] Starting: bytes allocating %lld > next gc %lld\n", this->bytesAllocated.Unwrap(), this->nextGc.Unwrap());
+    #endif
 
     this->Mark(this->globals);
 
@@ -1384,7 +1398,9 @@ void Runtime::Gc() {
 
     this->Sweep();
 
-    // std::printf("[GC] Reclaimed: %llu -> %llu\n", sizeBefore.Unwrap(), this->bytesAllocated.Unwrap());
+    #ifdef ESPRESSO_GC_DEBUG
+    std::printf("[GC] Reclaimed: %llu -> %llu\n", sizeBefore.Unwrap(), this->bytesAllocated.Unwrap());
+    #endif
 
     this->nextGc = Integer{2 * this->bytesAllocated.Unwrap()};
     if (this->nextGc.Unwrap() <= 0) {

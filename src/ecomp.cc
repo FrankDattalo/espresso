@@ -199,6 +199,10 @@ struct Compiler {
 
         void DeInit(Runtime* runtime) {
             Integer nilConstant = NewNilConstant(runtime);
+            Integer stackSize = StackPush(runtime);
+            if (stackSize.Unwrap() != 1) {
+                Panic("Unexpected stack size");
+            }
             EmitLong(runtime, ByteCodeType::LoadConstant, Integer{1}, nilConstant);
             Emit(runtime, ByteCodeType::Return, Integer{1});
             destination->SetStack(Integer{this->argumentCount}, Integer{this->registerCount});

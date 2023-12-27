@@ -9,7 +9,7 @@ debugger: prepare
 	cd build && cmake --build .
 
 gc: prepare
-	cd build && cmake -DCMAKE_BUILD_TYPE=Debug ..
+	cd build && cmake -DESPRESSO_GC_DEBUG=ON -DCMAKE_BUILD_TYPE=Debug ..
 	cd build && cmake --build .
 
 release: prepare

@@ -343,7 +343,7 @@ static void DoPrint(Runtime* rt, Value* val, Printed* printed, bool display) {
         }
         case ValueType::NativeFunction:
         case ValueType::Function: {
-            system->Write(out, "{fn}", 4);
+            system->Write(out, "fn()", 4);
             return;
         }
         case ValueType::String: {

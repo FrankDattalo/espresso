@@ -199,12 +199,13 @@ struct Compiler {
 
         void DeInit(Runtime* runtime) {
             Integer nilConstant = NewNilConstant(runtime);
-            Integer stackSize = StackPush(runtime);
-            if (stackSize.Unwrap() != 1) {
+            Integer result = StackPush(runtime);
+            Scope* scope = this->scopes.At(Integer{this->scopes.Length().Unwrap() - 1});
+            if (scope->stackSize != 1) {
                 Panic("Unexpected stack size");
             }
-            EmitLong(runtime, ByteCodeType::LoadConstant, Integer{1}, nilConstant);
-            Emit(runtime, ByteCodeType::Return, Integer{1});
+            EmitLong(runtime, ByteCodeType::LoadConstant, Integer{result}, nilConstant);
+            Emit(runtime, ByteCodeType::Return, Integer{result});
             destination->SetStack(Integer{this->argumentCount}, Integer{this->registerCount});
             locals.DeInit(runtime);
             scopes.DeInit(runtime);

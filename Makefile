@@ -32,8 +32,10 @@ output_tests: build asm
 	diff <( ./build/espresso ./lib/factorial.espresso ) <( cat ./test/output/factorial.txt )
 	diff <( ./build/espresso ./lib/fibonacci.espresso ) <( cat ./test/output/fibonacci.txt )
 	diff <( ./build/espresso ./lib/add3.espresso ) <( cat ./test/output/add3.txt )
+	diff <( ./build/espresso ./lib/sing.espresso ) <( cat ./test/output/sing.txt )
+	diff <( ./build/espresso ./lib/empty.espresso ) <( cat ./test/output/empty.txt )
 
-test: build output_tests
+test: clean build output_tests
 #cd build && CTEST_OUTPUT_ON_FAILURE=TRUE make test
 
 run:
@@ -52,4 +54,4 @@ asm:
 stats:
 	cat ./src/* | wc
 
-.PHONY: test clean prepare build flex stats asm
+.PHONY: test clean prepare build flex stats asm output_tests run gc release

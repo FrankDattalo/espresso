@@ -18,6 +18,8 @@ public:
 
     int Load(const char* name);
 
+    int Shell();
+
 private:
     void* impl;
 };

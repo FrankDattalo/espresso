@@ -261,7 +261,7 @@ void Runtime::Interpret() {
         Function* function = Local(Integer{0})->GetFunction(this);
         ByteCode* byteCode = function->ByteCodeAt(CurrentFrame()->ProgramCounter());
 
-        #if 0
+        #ifdef ESPRESSO_DEBUGGER
         espresso::native::debugger::Breakpoint(this);
         #endif
 

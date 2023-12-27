@@ -4,7 +4,7 @@ loadc R1 #C float 4.3
 loadc R2 #C float 3.4
 add R2 R1 R2
 
-loadc R1 #C string "print"
+loadc R1 #C string "println"
 loadg R1 R1
 invoke R1 2
 

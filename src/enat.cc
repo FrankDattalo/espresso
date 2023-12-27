@@ -46,6 +46,10 @@ static constexpr Entry ENTRIES[] = {
     }},
     {"print", 2, 2, [](Runtime* rt) {
         Print(rt, rt->Local(Integer{1}));
+        rt->Local(Integer{0})->SetNil();
+    }},
+    {"println", 2, 2, [](Runtime* rt) {
+        Print(rt, rt->Local(Integer{1}));
         rt->GetSystem()->Write(rt->GetSystem()->Stdout(), "\n", 1);
         rt->Local(Integer{0})->SetNil();
     }},
@@ -93,6 +97,88 @@ static constexpr Entry ENTRIES[] = {
 
         rt->Local(Integer{0})->SetBoolean(true);
         return;
+    }},
+    {"eval", 2, 5, [](Runtime* rt) {
+
+        rt->Local(Integer{0})->SetString(rt->NewString("compile"));
+        rt->LoadGlobal(Integer{0}, Integer{0});
+        rt->Invoke(Integer{0}, Integer{2});
+
+        rt->Copy(Integer{1}, Integer{0});
+        rt->Local(Integer{0})->SetString(rt->NewString("verifyByteCode"));
+        rt->LoadGlobal(Integer{0}, Integer{0});
+        rt->Invoke(Integer{0}, Integer{2});
+
+        // local 0 contains bytecode
+        rt->Invoke(Integer{0}, Integer{1});
+    }},
+    {"readline", 1, 3, [](Runtime* rt) {
+        rt->Local(Integer{0})->SetString(rt->NewString(""));
+        String* str = rt->Local(Integer{0})->GetString(rt);
+        str->Clear();
+
+        System* system = rt->GetSystem();
+        FILE* in = system->Stdin();
+
+        while (true) {
+            char c = system->Read(in);
+            if (c <= 0) {
+                break;
+            }
+            if (c == '\n') {
+                break;
+            }
+            str->Push(rt, c);
+        }
+
+        str->Push(rt, '\0');
+
+        if (str->Length().Unwrap() == 0) {
+            rt->Local(Integer{0})->SetNil();
+        }
+    }},
+    {"shell", 1, 5, [](Runtime* rt) {
+        while (true) {
+            rt->Local(Integer{2})->SetString(rt->NewString("print"));
+            rt->Local(Integer{3})->SetString(rt->NewString("espresso> "));
+            rt->LoadGlobal(Integer{2}, Integer{2});
+            rt->Invoke(Integer{2}, Integer{2});
+            rt->Copy(Integer{1}, Integer{2});
+
+            rt->Local(Integer{0})->SetString(rt->NewString("readline"));
+            rt->LoadGlobal(Integer{0}, Integer{0});
+            rt->Invoke(Integer{0}, Integer{1});
+            rt->Copy(Integer{1}, Integer{0});
+
+            if (rt->Local(Integer{0})->GetType() == ValueType::Nil) {
+                break;
+            }
+
+            try {
+                rt->Local(Integer{0})->SetString(rt->NewString("eval"));
+                rt->LoadGlobal(Integer{0}, Integer{0});
+                rt->Invoke(Integer{0}, Integer{2});
+                rt->Copy(Integer{1}, Integer{0});
+
+                rt->Local(Integer{0})->SetString(rt->NewString("println"));
+                rt->LoadGlobal(Integer{0}, Integer{0});
+                rt->Invoke(Integer{0}, Integer{2});
+
+            } catch (const ThrowException& e) {
+                rt->Local(Integer{2})->Copy(rt->StackAtAbsoluteIndex(e.GetAbsoluteStackIndex()));
+
+                rt->Local(Integer{0})->SetString(rt->NewString("println"));
+                rt->Local(Integer{1})->SetString(rt->NewString("ERROR Uncaught Exception:"));
+                rt->LoadGlobal(Integer{0}, Integer{0});
+                rt->Invoke(Integer{0}, Integer{2});
+
+                rt->Local(Integer{0})->SetString(rt->NewString("println"));
+                rt->Copy(Integer{1}, Integer{2});
+                rt->LoadGlobal(Integer{0}, Integer{0});
+                rt->Invoke(Integer{0}, Integer{2});
+            }
+        }
+        rt->Local(Integer{0})->SetNil();
     }},
     {"load", 2, 5, [](Runtime* rt) {
 

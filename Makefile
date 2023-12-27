@@ -4,6 +4,14 @@ build: prepare
 	cd build && cmake -DCMAKE_BUILD_TYPE=Debug ..
 	cd build && cmake --build .
 
+debugger: prepare
+	cd build && cmake -DESPRESSO_DEBUGGER=ON -DCMAKE_BUILD_TYPE=Debug ..
+	cd build && cmake --build .
+
+gc: prepare
+	cd build && cmake -DCMAKE_BUILD_TYPE=Debug ..
+	cd build && cmake --build .
+
 release: prepare
 	cd build && cmake -DCMAKE_BUILD_TYPE=Release ..
 	cd build && cmake --build .

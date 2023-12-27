@@ -6,10 +6,16 @@ set(CMAKE_CXX_STANDARD 20)
 set(CXX_STANDARD_REQUIRED true)
 
 # TODO: mode to shared lib
-set(CMAKE_CXX_FLAGS  "${CMAKE_CXX_FLAGS} -Wall -Werror -Wextra -Wpedantic -fvisibility=hidden")
+set(CMAKE_CXX_FLAGS  "${CMAKE_CXX_FLAGS} -Wall -Werror -Wextra -Wpedantic")
 set(CMAKE_CXX_FLAGS_DEBUG "-fsanitize=address,undefined,bounds,alignment -DDEBUG_ENABLED -g3")
 
 set(CMAKE_VERBOSE_MAKEFILE on)
+
+OPTION(ESPRESSO_DEBUGGER "Enable espresso bytecode debugger" OFF)
+
+IF(ESPRESSO_DEBUGGER)
+    ADD_DEFINITIONS(-DESPRESSO_DEBUGGER)
+ENDIF(ESPRESSO_DEBUGGER)
 
 set(COMMON
     src/espresso.cc

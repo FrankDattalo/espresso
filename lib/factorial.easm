@@ -30,7 +30,7 @@ loadc R2 #C integer 5
 invoke R1 2
 
 copy R2 R1
-loadc R1 #C string "print"
+loadc R1 #C string "println"
 loadg R1 R1
 invoke R1 2
 return R1

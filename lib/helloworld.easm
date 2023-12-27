@@ -1,6 +1,6 @@
 arity 1
 
-loadc R1 #C string "print"
+loadc R1 #C string "println"
 loadg R1 R1
 loadc R2 #C string "Hello, World!"
 invoke R1 2

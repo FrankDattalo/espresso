@@ -2,14 +2,20 @@
 
 int main(int argc, char** argv) {
 
-    if (argc != 2) {
-        return 1;
+    const char* fileName = nullptr;
+
+    if (argc >= 2) {
+        fileName = argv[1];
     }
 
     const char* loadPath = ".";
-    const char* fileName = argv[1];
 
     espresso::DefaultSystem system;
     espresso::Espresso espresso{&system, loadPath};
-    return espresso.Load(fileName);
+
+    if (fileName != nullptr) {
+        return espresso.Load(fileName);
+    } else {
+        return espresso.Shell();
+    }
 }

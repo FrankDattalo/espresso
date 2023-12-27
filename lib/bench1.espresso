@@ -1,0 +1,5 @@
+var iter = 0;
+
+while (lessThan(iter, 100000)) {
+    iter = add(1, iter);
+}

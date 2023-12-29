@@ -1,5 +1,8 @@
-var add3 = fn(a, b, c) {
-    return add(a, add(b, c));
-};
 
-println(add3(4, 5, 6));
+(def factorial
+  (fn (x)
+    (if (lessThanOrEqual x 0)
+      1
+      (multiply x (factorial (subtract x 1))))))
+
+(println (factorial 5))

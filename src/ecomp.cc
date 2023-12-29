@@ -52,41 +52,6 @@ private:
     std::int64_t next;
 };
 
-/**
- *
- * Grammar:
- *
- * file
- *  | statement*
- *
- * statement
- *  | "global" identifier "=" expression ";"
- *  | "var" identifier "=" expression ";"
- *  | "if" expression "{" statement* "}" ("else" "{" statement* "}")?
- *  | "while" expression "{" statement* "}"
- *  | "return" (expression)? ";"
- *  | expression ";"
- *
- * expression
- *  | float
- *  | integer
- *  | "\"" any "\""
- *  | "true"
- *  | "false"
- *  | "nil"
- *  | "fn" "(" ( identifier ("," identifier )* )? ")" "{" statement* "}"
- *  | invoke
- *
- * invoke
- *  | target "(" ( expression ( "," expression )* )? ")"
- *
- * target
- *  | identifier
- *  | target "." identifier
- *  | "(" expression ")"
- *
-*/
-
 struct Compiler {
 
     static void Abort(Runtime* runtime, const char* message) {
@@ -95,27 +60,18 @@ struct Compiler {
     }
 
     enum class TokenType {
-        Global,
-        Var,
+        Def,
+        Let,
         If,
-        Else,
-        While,
-        Return,
         Double,
         Integer,
         String,
         Boolean,
         Nil,
         Fn,
-        Assign,
         Identifier,
         LeftParen,
         RightParen,
-        Period,
-        Comma,
-        LeftCurly,
-        RightCurly,
-        SemiColon,
         EndOfFile,
         WhiteSpace,
         Unknown,
@@ -123,27 +79,18 @@ struct Compiler {
 
     constexpr static const char* TokenTypeToString(TokenType type) {
         switch (type) {
-            case TokenType::Global: { return "Global"; }
-            case TokenType::Var: { return "Var"; }
+            case TokenType::Def: { return "Def"; }
+            case TokenType::Let: { return "Let"; }
             case TokenType::If: { return "If"; }
-            case TokenType::Else: { return "Else"; }
-            case TokenType::While: { return "While"; }
-            case TokenType::Return: { return "Return"; }
             case TokenType::Double: { return "Double"; }
             case TokenType::Integer: { return "Integer"; }
             case TokenType::String: { return "String"; }
             case TokenType::Boolean: { return "Boolean"; }
             case TokenType::Nil: { return "Nil"; }
             case TokenType::Fn: { return "Fn"; }
-            case TokenType::Assign: { return "Assign"; }
             case TokenType::Identifier: { return "Identifier"; }
             case TokenType::LeftParen: { return "LeftParen"; }
             case TokenType::RightParen: { return "RightParen"; }
-            case TokenType::Period: { return "Period"; }
-            case TokenType::Comma: { return "Comma"; }
-            case TokenType::LeftCurly: { return "LeftCurly"; }
-            case TokenType::RightCurly: { return "RightCurly"; }
-            case TokenType::SemiColon: { return "SemiColon"; }
             case TokenType::WhiteSpace: { return "WhiteSpace"; }
             case TokenType::EndOfFile: { return "EndOfFile"; }
             case TokenType::Unknown: { return "Unknown"; }
@@ -192,20 +139,13 @@ struct Compiler {
             registerCount = 1;
             Variable* self = this->locals.Push(runtime);
             self->isDefined = true;
-            constexpr const char* frameIdentifier = "self";
-            static_assert(frameIdentifier[4] == '\0');
-            self->token = Token{TokenType::Identifier, frameIdentifier, 4};
+            constexpr const char* frameIdentifier = "@self";
+            constexpr const int frameIdentifierLength = 5;
+            static_assert(frameIdentifier[frameIdentifierLength] == '\0');
+            self->token = Token{TokenType::Identifier, frameIdentifier, frameIdentifierLength};
         }
 
         void DeInit(Runtime* runtime) {
-            Integer nilConstant = NewNilConstant(runtime);
-            Integer result = StackPush(runtime);
-            Scope* scope = this->scopes.At(Integer{this->scopes.Length().Unwrap() - 1});
-            if (scope->stackSize != 1) {
-                Panic("Unexpected stack size");
-            }
-            EmitLong(runtime, ByteCodeType::LoadConstant, Integer{result}, nilConstant);
-            Emit(runtime, ByteCodeType::Return, Integer{result});
             destination->SetStack(Integer{this->argumentCount}, Integer{this->registerCount});
             locals.DeInit(runtime);
             scopes.DeInit(runtime);
@@ -293,7 +233,7 @@ struct Compiler {
             scope->stackSize--;
             if (scope->stackSize < 0) {
                 // compiler bug
-                Panic("Scope stack underflow");
+                Panic("Compiler bug: Variable in stack underflow");
             }
         }
 
@@ -684,24 +624,15 @@ struct Compiler {
                 matcher->handle = handle;
             };
 
-            literalNeedingSeparator(TokenType::Global, "global");
-            literalNeedingSeparator(TokenType::Var, "var");
+            literalNeedingSeparator(TokenType::Def, "def");
+            literalNeedingSeparator(TokenType::Let, "let");
             literalNeedingSeparator(TokenType::If, "if");
-            literalNeedingSeparator(TokenType::Else, "else");
-            literalNeedingSeparator(TokenType::While, "while");
-            literalNeedingSeparator(TokenType::Return, "return");
             literalNeedingSeparator(TokenType::Boolean, "true");
             literalNeedingSeparator(TokenType::Boolean, "false");
             literalNeedingSeparator(TokenType::Nil, "nil");
             literalNeedingSeparator(TokenType::Fn, "fn");
-            literal(TokenType::Assign, "=");
             literal(TokenType::LeftParen, "(");
             literal(TokenType::RightParen, ")");
-            literal(TokenType::Period, ".");
-            literal(TokenType::LeftCurly, "{");
-            literal(TokenType::RightCurly, "}");
-            literal(TokenType::SemiColon, ";");
-            literal(TokenType::Comma, ",");
             literal(TokenType::WhiteSpace, " ");
             literal(TokenType::WhiteSpace, "\t");
             literal(TokenType::WhiteSpace, "\r");
@@ -744,123 +675,125 @@ struct Compiler {
     }
 
     void Compile(Runtime* runtime) {
+        bool first = true;
         while (!tokenizer.AtEof()) {
-            CompileStatement(runtime);
+            if (!first) {
+                CurrentContext()->StackPop();
+            }
+            CompileExpression(runtime);
+            first = false;
         }
+        Integer top = CurrentContext()->StackTop();
+        CurrentContext()->Emit(runtime, ByteCodeType::Return, top);
     }
 
-    void CompileStatement(Runtime* runtime) {
+    void CompileExpression(Runtime* runtime) {
         Token current = tokenizer.Next();
-        switch (current.type) {
-            case TokenType::Var: {
+        switch(current.type) {
+            case TokenType::Boolean: {
                 tokenizer.PutBack(&current);
-                CompileVarStatement(runtime);
+                CompileBoolean(runtime);
                 break;
             }
-            case TokenType::Global: {
+            case TokenType::Integer: {
                 tokenizer.PutBack(&current);
-                CompileGlobalStatement(runtime);
+                CompileInteger(runtime);
                 break;
             }
-            case TokenType::While: {
+            case TokenType::String: {
                 tokenizer.PutBack(&current);
-                CompileWhileStatement(runtime);
+                CompileString(runtime);
                 break;
             }
-            case TokenType::If: {
+            case TokenType::Double: {
                 tokenizer.PutBack(&current);
-                CompileIfStatement(runtime);
+                CompileDouble(runtime);
                 break;
             }
-            case TokenType::Return: {
+            case TokenType::Nil: {
                 tokenizer.PutBack(&current);
-                CompileReturnStatement(runtime);
+                CompileNil(runtime);
                 break;
             }
+            case TokenType::Identifier: {
+                tokenizer.PutBack(&current);
+                CompileIdentifier(runtime);
+                break;
+            }
+            // assume it's a compound
             default: {
                 Token next = tokenizer.Next();
                 tokenizer.PutBack(&next);
                 tokenizer.PutBack(&current);
-                if (current.type == TokenType::Identifier && next.type == TokenType::Assign) {
-                    CompileAssignStatment(runtime);
-                } else {
-                    CompileExpressionStatement(runtime);
+                switch (next.type) {
+                    case TokenType::Def: {
+                        CompileDefExpression(runtime);
+                        break;
+                    }
+                    case TokenType::If: {
+                        CompileIfExpression(runtime);
+                        break;
+                    }
+                    case TokenType::Let: {
+                        CompileLetExpression(runtime);
+                        break;
+                    }
+                    case TokenType::Fn: {
+                        CompileFunctionExpression(runtime);
+                        break;
+                    }
+                    default: {
+                        CompileInvokeExpression(runtime);
+                        break;
+                    }
                 }
                 break;
             }
         }
     }
 
-    void CompileReturnStatement(Runtime* runtime) {
-        tokenizer.Expect(runtime, TokenType::Return);
-        CompileExpression(runtime);
-        Integer top = CurrentContext()->StackTop();
-        CurrentContext()->StackPop();
-        CurrentContext()->Emit(runtime, ByteCodeType::Return, top);
-        tokenizer.Expect(runtime, TokenType::SemiColon);
-    }
-
-    void CompileWhileStatement(Runtime* runtime) {
-        tokenizer.Expect(runtime, TokenType::While);
-        Integer startOfWhile = CurrentContext()->CurrentByteCodeLocation();
-        CompileExpression(runtime);
-        Integer top = CurrentContext()->StackTop();
-        CurrentContext()->StackPop();
-        Integer jumpIfFalseLocation = CurrentContext()->EmitLong(runtime, ByteCodeType::JumpIfFalse, top, Integer{0});
-        CompileBlock(runtime);
-        CurrentContext()->EmitLong(runtime, ByteCodeType::Jump, Integer{0}, startOfWhile);
-        Integer endOfLoop = CurrentContext()->CurrentByteCodeLocation();
-        CurrentContext()->UpdateLong(runtime, jumpIfFalseLocation, ByteCodeType::JumpIfFalse, top, endOfLoop);
-    }
-
-    void CompileBlock(Runtime* runtime) {
-        tokenizer.Expect(runtime, TokenType::LeftCurly);
-        while (true) {
-            Token curr = tokenizer.Next();
-            tokenizer.PutBack(&curr);
-            if (curr.type == TokenType::RightCurly) {
-                break;
-            }
-            CompileStatement(runtime);
-        }
-        tokenizer.Expect(runtime, TokenType::RightCurly);
-    }
-
-    void CompileIfStatement(Runtime* runtime) {
+    void CompileIfExpression(Runtime* runtime) {
+        tokenizer.Expect(runtime, TokenType::LeftParen);
         tokenizer.Expect(runtime, TokenType::If);
+        // condition
         CompileExpression(runtime);
         Integer top = CurrentContext()->StackTop();
         CurrentContext()->StackPop();
         Integer jumpIfFalseLocation = CurrentContext()->EmitLong(runtime, ByteCodeType::JumpIfFalse, top, Integer{0});
-        CompileBlock(runtime);
+        // if true
+        CompileExpression(runtime);
 
         Token curr = tokenizer.Next();
         tokenizer.PutBack(&curr);
-        if (curr.type == TokenType::Else) {
-            tokenizer.Expect(runtime, TokenType::Else);
-            Integer jumpAfterIfTrue = CurrentContext()->EmitLong(runtime, ByteCodeType::Jump, Integer{0}, Integer{0});
-            Integer endOfIfTrue = CurrentContext()->CurrentByteCodeLocation();
-            CompileBlock(runtime);
-            Integer endOfIfFalse = CurrentContext()->CurrentByteCodeLocation();
-            CurrentContext()->UpdateLong(runtime, jumpIfFalseLocation, ByteCodeType::JumpIfFalse, top, endOfIfTrue);
-            CurrentContext()->UpdateLong(runtime, jumpAfterIfTrue, ByteCodeType::Jump, Integer{0}, endOfIfFalse);
-        } else {
-            Integer endOfIfTrue = CurrentContext()->CurrentByteCodeLocation();
-            CurrentContext()->UpdateLong(runtime, jumpIfFalseLocation, ByteCodeType::JumpIfFalse, top, endOfIfTrue);
-        }
-    }
 
-    void CompileExpressionStatement(Runtime* runtime) {
-        CompileExpression(runtime);
-        tokenizer.Expect(runtime, TokenType::SemiColon);
+        Integer jumpAfterIfTrue = CurrentContext()->EmitLong(runtime, ByteCodeType::Jump, Integer{0}, Integer{0});
+        Integer endOfIfTrue = CurrentContext()->CurrentByteCodeLocation();
+
+        // pop the if true location off the stack
+        // so that if false is in the right place
+        // this doesn't emit any instructions only puts
+        // the compiler in the right spot
         CurrentContext()->StackPop();
+
+        if (curr.type != TokenType::RightParen) {
+            // if false
+            CompileExpression(runtime);
+        } else {
+            CurrentContext()->NewNilConstant(runtime);
+        }
+
+        tokenizer.Expect(runtime, TokenType::RightParen);
+
+        Integer endOfIfFalse = CurrentContext()->CurrentByteCodeLocation();
+        CurrentContext()->UpdateLong(runtime, jumpIfFalseLocation, ByteCodeType::JumpIfFalse, top, endOfIfTrue);
+        CurrentContext()->UpdateLong(runtime, jumpAfterIfTrue, ByteCodeType::Jump, Integer{0}, endOfIfFalse);
     }
 
-    void CompileGlobalStatement(Runtime* runtime) {
-        tokenizer.Expect(runtime, TokenType::Global);
+    void CompileDefExpression(Runtime* runtime) {
+        tokenizer.Expect(runtime, TokenType::LeftParen);
+        tokenizer.Expect(runtime, TokenType::Def);
         Token identifier = tokenizer.Expect(runtime, TokenType::Identifier);
         Integer constantNumber = CurrentContext()->NewStringConstant(runtime, identifier.source, identifier.length);
-        tokenizer.Expect(runtime, TokenType::Assign);
         CompileExpression(runtime);
         // there should be something at the top of the stack that
         // we will use as the value of the expression
@@ -871,133 +804,94 @@ struct Compiler {
         CurrentContext()->StackPop(); // key
         CurrentContext()->StackPop(); // value
         CurrentContext()->Emit(runtime, ByteCodeType::StoreGlobal, globalKey, globalValue);
-        tokenizer.Expect(runtime, TokenType::SemiColon);
+        tokenizer.Expect(runtime, TokenType::RightParen);
+
+        // return a nil from this expression
+        constantNumber = CurrentContext()->NewNilConstant(runtime);
+        registerDest = CurrentContext()->StackPush(runtime);
+        CurrentContext()->EmitLong(runtime, ByteCodeType::LoadConstant, registerDest, constantNumber);
     }
 
-    void CompileAssignStatment(Runtime* runtime) {
-        Token identifier = tokenizer.Expect(runtime, TokenType::Identifier);
-        Integer localNumber = CurrentContext()->ResolveLocal(&identifier);
-        if (localNumber.Unwrap() < 0) {
-            runtime->Local(Integer{0})->SetString(runtime->NewString("Undefined local"));
-            runtime->Throw(Integer{0});
-            return;
+    void CompileLetExpression(Runtime* runtime) {
+        tokenizer.Expect(runtime, TokenType::LeftParen);
+        tokenizer.Expect(runtime, TokenType::Let);
+
+        // begin of vars
+        tokenizer.Expect(runtime, TokenType::LeftParen);
+
+        // TODO: undefine the locals at the end of let expression
+        // std::int64_t localsDefined = 0;
+
+        while (true) {
+            Token next = tokenizer.Next();
+            tokenizer.PutBack(&next);
+            if (next.type == TokenType::EndOfFile || next.type == TokenType::RightParen) {
+                break;
+            }
+            Token identifier = tokenizer.Expect(runtime, TokenType::Identifier);
+            Integer localNumber = CurrentContext()->StartDefineLocal(runtime, identifier);
+            CompileExpression(runtime);
+            Integer top = CurrentContext()->StackTop();
+            CurrentContext()->StackPop();
+            CurrentContext()->FinishDefineLocal(runtime, localNumber);
+            if (top.Unwrap() != localNumber.Unwrap()) {
+                Panic("Compiler bug: let var not defined in correct position");
+            }
+            // localsDefined++;
         }
-        tokenizer.Expect(runtime, TokenType::Assign);
+        // end of vars
+        tokenizer.Expect(runtime, TokenType::RightParen);
+
+        // let body
         CompileExpression(runtime);
-        Integer top = CurrentContext()->StackTop();
-        CurrentContext()->StackPop();
-        tokenizer.Expect(runtime, TokenType::SemiColon);
-        CurrentContext()->Emit(runtime, ByteCodeType::Copy, localNumber, top);
+        tokenizer.Expect(runtime, TokenType::RightParen);
+
+        // pop the locations that we have defined
+        // for (std::int64_t i = 0; i < localsDefined; i++) {
+        //     CurrentContext()->StackPop();
+        // }
     }
 
-    void CompileVarStatement(Runtime* runtime) {
-        tokenizer.Expect(runtime, TokenType::Var);
-        Token identifier = tokenizer.Expect(runtime, TokenType::Identifier);
-        Integer localNumber = CurrentContext()->StartDefineLocal(runtime, identifier);
-        tokenizer.Expect(runtime, TokenType::Assign);
-        CompileExpression(runtime);
-        Integer top = CurrentContext()->StackTop();
-        CurrentContext()->StackPop();
-        CurrentContext()->FinishDefineLocal(runtime, localNumber);
-        if (top.Unwrap() != localNumber.Unwrap()) {
-            Panic("Compiler bug: var not defined in correct position");
-        }
-        tokenizer.Expect(runtime, TokenType::SemiColon);
-    }
-
-    void CompileFunction(Runtime* runtime) {
+    void CompileFunctionExpression(Runtime* runtime) {
         Integer destStackAddress = CurrentContext()->StackPush(runtime);
         Integer functionConstantId = CurrentContext()->NewFunctionConstant(runtime);
         Function* functionDest = CurrentContext()->ConstantAt(functionConstantId)->GetFunction(runtime);
         PushContext(runtime)->Init(runtime, functionDest);
+        tokenizer.Expect(runtime, TokenType::LeftParen);
         tokenizer.Expect(runtime, TokenType::Fn);
         tokenizer.Expect(runtime, TokenType::LeftParen);
-        bool first = true;
         while (true) {
             Token curr = tokenizer.Next();
             tokenizer.PutBack(&curr);
             if (curr.type == TokenType::EndOfFile || curr.type == TokenType::RightParen) {
                 break;
             }
-            if (!first) {
-                tokenizer.Expect(runtime, TokenType::Comma);
-            }
             Token ident = tokenizer.Expect(runtime, TokenType::Identifier);
-            first = false;
             CurrentContext()->DefineParameter(runtime, ident);
         }
         tokenizer.Expect(runtime, TokenType::RightParen);
-        tokenizer.Expect(runtime, TokenType::LeftCurly);
         while (true) {
             Token curr = tokenizer.Next();
             tokenizer.PutBack(&curr);
-            if (curr.type == TokenType::EndOfFile || curr.type == TokenType::RightCurly) {
+            if (curr.type == TokenType::EndOfFile || curr.type == TokenType::RightParen) {
                 break;
             }
-            CompileStatement(runtime);
+            CompileExpression(runtime);
+            Token next = tokenizer.Next();
+            tokenizer.PutBack(&next);
+            if (next.type == TokenType::RightParen) {
+                // last statement, return
+                Integer result = CurrentContext()->StackTop();
+                CurrentContext()->Emit(runtime, ByteCodeType::Return, Integer{result});
+
+            } else {
+                // middle statement, pop
+                CurrentContext()->StackPop();
+            }
         }
-        tokenizer.Expect(runtime, TokenType::RightCurly);
+        tokenizer.Expect(runtime, TokenType::RightParen);
         PopContext(runtime);
         CurrentContext()->EmitLong(runtime, ByteCodeType::LoadConstant, destStackAddress, functionConstantId);
-    }
-
-    void CompileExpression(Runtime* runtime) {
-        Token current = tokenizer.Next();
-        switch (current.type) {
-            case TokenType::Nil: {
-                tokenizer.PutBack(&current);
-                CompileNil(runtime);
-                return;
-            }
-            case TokenType::String: {
-                tokenizer.PutBack(&current);
-                CompileString(runtime);
-                return;
-            }
-            case TokenType::Integer: {
-                tokenizer.PutBack(&current);
-                CompileInteger(runtime);
-                return;
-            }
-            case TokenType::Double: {
-                tokenizer.PutBack(&current);
-                CompileDouble(runtime);
-                return;
-            }
-            case TokenType::Boolean: {
-                tokenizer.PutBack(&current);
-                CompileBoolean(runtime);
-                return;
-            }
-            case TokenType::Identifier: {
-                Token next = tokenizer.Next();
-                tokenizer.PutBack(&next);
-                tokenizer.PutBack(&current);
-                if (next.type == TokenType::LeftParen) {
-                    CompileInvoke(runtime);
-                } else {
-                    CompileIdentifier(runtime);
-                }
-                return;
-            }
-            case TokenType::LeftParen: {
-                // regular parens which have no ompact on expression
-                // simply unwrap them
-                // left paren already read
-                CompileExpression(runtime);
-                tokenizer.Expect(runtime, TokenType::RightParen);
-                return;
-            }
-            case TokenType::Fn: {
-                // function definition
-                tokenizer.PutBack(&current);
-                CompileFunction(runtime);
-                return;
-            }
-            default: {
-                Abort(runtime, "Expected an expression");
-            }
-        }
     }
 
     void CompileNil(Runtime* runtime) {
@@ -1032,18 +926,16 @@ struct Compiler {
         }
     }
 
-    void CompileInvoke(Runtime* runtime) {
-
-        Token start = tokenizer.Expect(runtime, TokenType::Identifier);
-        tokenizer.PutBack(&start);
-
-        std::int64_t argumentCount = 1;
-        CompileIdentifier(runtime);
-
-        Integer startRegister = CurrentContext()->StackTop();
+    void CompileInvokeExpression(Runtime* runtime) {
 
         tokenizer.Expect(runtime, TokenType::LeftParen);
-        bool firstParam = true;
+
+        std::int64_t argumentCount = 1;
+
+        // target
+        CompileExpression(runtime);
+
+        Integer startRegister = CurrentContext()->StackTop();
 
         while (true) {
             Token current = tokenizer.Next();
@@ -1053,13 +945,8 @@ struct Compiler {
                 break;
             }
 
-            if (!firstParam) {
-                tokenizer.Expect(runtime, TokenType::Comma);
-            }
-
             CompileExpression(runtime);
             argumentCount++;
-            firstParam = false;
         }
 
         tokenizer.Expect(runtime, TokenType::RightParen);

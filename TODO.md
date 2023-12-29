@@ -9,16 +9,18 @@
 12. Nicer error messages in compiler
 13. Location tracking in compiler
 14. Field access get/set. On invoke, expressions, and assignment.
-16. Object hierarchy.
+16. Object hierarchy?
 17. Method resolution?
 18. Mapget instruction for field access
 19. Test coverage
-20. Remove builtin opcodes for math?
+20. Remove builtin opcodes for math
 21. Nested scopes / shadowing
 22. Redefinition of locals?
 23. Module loading once, path normalization
 24. Running with valgrind to track memory leaks
 25. Avoid c++ exceptions for language level exceptions?
+26. Lisp it
+27. Imuutable data structures
 
 # Done
 

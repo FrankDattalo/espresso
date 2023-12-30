@@ -1,8 +1,4 @@
+(def add3 (fn (a b c)
+    (add a (add b c))))
 
-(def factorial
-  (fn (x)
-    (if (lessThanOrEqual x 0)
-      1
-      (multiply x (factorial (subtract x 1))))))
-
-(println (factorial 5))
+(println (add3 4 5 6))

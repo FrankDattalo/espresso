@@ -1,2 +1,3 @@
-var f = fn() {};
-println(f());
+(let 
+    (f (fn ()))
+    (println (f)))

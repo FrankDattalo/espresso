@@ -233,7 +233,7 @@ struct Compiler {
             scope->stackSize--;
             if (scope->stackSize < 0) {
                 // compiler bug
-                Panic("Compiler bug: Variable in stack underflow");
+                Panic("Compiler bug: Variable stack underflow");
             }
         }
 
@@ -351,6 +351,31 @@ struct Compiler {
             }
             if (this->registerCount < scope->localsSize) {
                 Panic("After end of definition registerCount < localsSize");
+            }
+        }
+
+        void PushScope(Runtime* runtime) {
+            Scope* scope = this->scopes.Push(runtime);
+            Scope* outer = this->scopes.At(Integer{this->scopes.Length().Unwrap() - 2});
+
+            scope->localsSize = outer->localsSize;
+            scope->stackSize = outer->stackSize;
+
+            if (scope->stackSize != 0) {
+                Panic("Compiler bug: scope->stackSize != 0");
+            }
+        }
+
+        void PopScope() {
+            this->scopes.Pop();
+            // remove the locals from the locals array that were declared inner scope
+            Scope* current = this->scopes.At(Integer{this->scopes.Length().Unwrap() - 1});
+            std::int64_t locals = current->localsSize;
+            if (locals > this->locals.Length().Unwrap()) {
+                Panic("Compiler bug: locals underflow");
+            }
+            while (locals < this->locals.Length().Unwrap()) {
+                this->locals.Pop();
             }
         }
     };
@@ -819,8 +844,7 @@ struct Compiler {
         // begin of vars
         tokenizer.Expect(runtime, TokenType::LeftParen);
 
-        // TODO: undefine the locals at the end of let expression
-        // std::int64_t localsDefined = 0;
+        CurrentContext()->PushScope(runtime);
 
         while (true) {
             Token next = tokenizer.Next();
@@ -846,10 +870,11 @@ struct Compiler {
         CompileExpression(runtime);
         tokenizer.Expect(runtime, TokenType::RightParen);
 
-        // pop the locations that we have defined
-        // for (std::int64_t i = 0; i < localsDefined; i++) {
-        //     CurrentContext()->StackPop();
-        // }
+        // ensure the location from the inner scope is in the right place in the outer scope
+        Integer source = CurrentContext()->StackTop();
+        CurrentContext()->PopScope();
+        Integer dest = CurrentContext()->StackPush(runtime);
+        CurrentContext()->Emit(runtime, ByteCodeType::Copy, dest, source);
     }
 
     void CompileFunctionExpression(Runtime* runtime) {
@@ -870,26 +895,33 @@ struct Compiler {
             CurrentContext()->DefineParameter(runtime, ident);
         }
         tokenizer.Expect(runtime, TokenType::RightParen);
+        bool gotExpression = false;
         while (true) {
             Token curr = tokenizer.Next();
             tokenizer.PutBack(&curr);
             if (curr.type == TokenType::EndOfFile || curr.type == TokenType::RightParen) {
                 break;
             }
+            gotExpression = true;
             CompileExpression(runtime);
             Token next = tokenizer.Next();
             tokenizer.PutBack(&next);
-            if (next.type == TokenType::RightParen) {
-                // last statement, return
-                Integer result = CurrentContext()->StackTop();
-                CurrentContext()->Emit(runtime, ByteCodeType::Return, Integer{result});
-
-            } else {
-                // middle statement, pop
+            // middle statement, pop
+            if (next.type != TokenType::RightParen) {
                 CurrentContext()->StackPop();
             }
         }
+        if (!gotExpression) {
+            // return nil if nothing
+            Integer constantNumber = CurrentContext()->NewNilConstant(runtime);
+            Integer registerDest = CurrentContext()->StackPush(runtime);
+            CurrentContext()->EmitLong(runtime, ByteCodeType::LoadConstant, registerDest, constantNumber);
+        }
+        // return from last expression
+        Integer result = CurrentContext()->StackTop();
+        CurrentContext()->Emit(runtime, ByteCodeType::Return, Integer{result});
         tokenizer.Expect(runtime, TokenType::RightParen);
+
         PopContext(runtime);
         CurrentContext()->EmitLong(runtime, ByteCodeType::LoadConstant, destStackAddress, functionConstantId);
     }

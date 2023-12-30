@@ -46,11 +46,11 @@
         "name": "variable.other.espresso"
       },
       "keywordControl": {
-        "match": "\\b(if|else|while|break|return)\\b",
+        "match": "\\b(if)\\b",
         "name": "keyword.control.espresso"
       },
       "keywordNonControl": {
-        "match": "\\b(global|fn|var)\\b",
+        "match": "\\b(def|fn|let)\\b",
         "name": "keyword.other.espresso"
       }
     }

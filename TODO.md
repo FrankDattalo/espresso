@@ -14,12 +14,10 @@
 18. Mapget instruction for field access
 19. Test coverage
 20. Remove builtin opcodes for math
-21. Nested scopes / shadowing
-22. Redefinition of locals?
+22. Redefinition of locals / shadowing?
 23. Module loading once, path normalization
 24. Running with valgrind to track memory leaks
 25. Avoid c++ exceptions for language level exceptions?
-26. Lisp it
 27. Imuutable data structures
 
 # Done
@@ -30,3 +28,5 @@
 5. Nicer error messages
 6. Bytecode verifier
 15. Assignment statement.
+21. Nested scopes
+26. Lisp it

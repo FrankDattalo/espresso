@@ -1,5 +1,0 @@
-var add3 = fn(a, b, c) {
-    return add(a, add(b, c));
-};
-
-println(add3(4, 5, 6));

@@ -1,24 +1,19 @@
-var fibonacci = fn(n) {
-    var prev = 1;
-    var curr = 1;
-    var iter = 1;
-    while (lessThan(iter, n)) {
-        var temp = curr;
-        curr = add(curr, prev);
-        prev = temp;
-        iter = add(iter, 1);
-    }
-    return curr;
-};
+(def fibonacciiter (fn (n prev curr iter)
+    (if (greaterThanOrEqual iter n)
+        curr
+        (fibonacciiter n curr (add prev curr) (add iter 1)))))
 
-println(fibonacci( 1));
-println(fibonacci( 2));
-println(fibonacci( 3));
-println(fibonacci( 4));
-println(fibonacci( 5));
-println(fibonacci( 6));
-println(fibonacci( 7));
-println(fibonacci( 8));
-println(fibonacci( 9));
-println(fibonacci(10));
-println(fibonacci(11));
+(def fibonacci (fn (n)
+    (fibonacciiter n 1 1 1)))
+
+(println (fibonacci  1))
+(println (fibonacci  2))
+(println (fibonacci  3))
+(println (fibonacci  4))
+(println (fibonacci  5))
+(println (fibonacci  6))
+(println (fibonacci  7))
+(println (fibonacci  8))
+(println (fibonacci  9))
+(println (fibonacci 10))
+(println (fibonacci 11))

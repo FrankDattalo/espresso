@@ -1,5 +1,6 @@
 # To Do
 
+31. Tail recursion
 9. Closure support
 7. Hashing in map
 10. Bit pack values & object headers

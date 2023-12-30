@@ -80,6 +80,16 @@ System* Runtime::GetSystem() {
 }
 
 void Runtime::Invoke(Integer localBase, Integer argumentCount) {
+    RawInvoke(localBase, argumentCount, false);
+}
+
+void Runtime::InvokeTail(Integer localBase, Integer argumentCount) {
+    RawInvoke(localBase, argumentCount, true);
+}
+
+void Runtime::RawInvoke(Integer localBase, Integer argumentCount, bool isTailInvoke) {
+
+    (void)(isTailInvoke);
 
     ValueType fnType = this->Local(localBase)->GetType();
 
@@ -272,6 +282,13 @@ void Runtime::Interpret() {
         switch (byteCode->Type()) {
             case ByteCodeType::NoOp: {
                 CurrentFrame()->AdvanceProgramCounter();
+                break;
+            }
+            case ByteCodeType::InvokeTail: {
+                CurrentFrame()->AdvanceProgramCounter();
+                Integer arg1 = byteCode->SmallArgument1();
+                Integer arg2 = byteCode->SmallArgument2();
+                InvokeTail(arg1, arg2);
                 break;
             }
             case ByteCodeType::Invoke: {
@@ -1019,6 +1036,14 @@ void ByteCode::Verify(Runtime* rt, const Function* fn) const {
         case ByteCodeType::LoadGlobal: {
             validateRegisterIsWritable(this->SmallArgument1(), "Invalid writable register R%lld for LoadGlobal");
             validateRegisterIsReadable(this->SmallArgument2(), "Invalid readable register R%lld for LoadGlobal");
+            break;
+        }
+        case ByteCodeType::InvokeTail: {
+            validateRegisterIsWritable(this->SmallArgument1(), "Invalid writable register R%lld for Invoke");
+            std::int64_t argCount = this->SmallArgument2().Unwrap();
+            if (argCount <= 0) {
+                fmtAbort("Invalid argument count %lld in invoketail", Integer{argCount});
+            }
             break;
         }
         case ByteCodeType::Invoke: {

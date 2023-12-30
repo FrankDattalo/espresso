@@ -442,6 +442,13 @@ void PrintByteCode(Runtime* rt, Function* fn, ByteCode* bc) {
                 bc->SmallArgument1().Unwrap(), bc->SmallArgument2().Unwrap());
             break;
         }
+        case ByteCodeType::InvokeTail: {
+            std::printf(fmt, "invoketail");
+            std::printf(
+                "R%lld %lld\n",
+                bc->SmallArgument1().Unwrap(), bc->SmallArgument2().Unwrap());
+            break;
+        }
         case ByteCodeType::Invoke: {
             std::printf(fmt, "invoke");
             std::printf(

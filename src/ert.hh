@@ -238,6 +238,7 @@ namespace bits {
     static constexpr uint32_t OP_JUMPF         = 0b00001111000000000000000000000000;
     static constexpr uint32_t OP_JUMP          = 0b00010000000000000000000000000000;
     static constexpr uint32_t OP_STORE_G       = 0b00010001000000000000000000000000;
+    static constexpr uint32_t OP_INVOKE_TAIL   = 0b00010010000000000000000000000000;
 }
 
 enum class ByteCodeType : std::uint32_t {
@@ -250,6 +251,7 @@ enum class ByteCodeType : std::uint32_t {
     Jump = bits::OP_JUMP,
     LoadGlobal = bits::OP_LOAD_GLOBAL,
     StoreGlobal = bits::OP_STORE_G,
+    InvokeTail = bits::OP_INVOKE_TAIL,
 };
 
 class NativeFunction;
@@ -543,6 +545,9 @@ public:
     Runtime& operator=(Runtime&&) = delete;
 
     void Invoke(Integer base, Integer argumentCount);
+    void InvokeTail(Integer base, Integer argumentCount);
+
+    void RawInvoke(Integer base, Integer argumentCount, bool inTailPosition);
 
     CallFrame* CurrentFrame();
 

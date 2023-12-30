@@ -443,34 +443,6 @@ void PrintByteCode(Runtime* rt, Function* fn, ByteCode* bc) {
                 bc->SmallArgument1().Unwrap(), bc->SmallArgument2().Unwrap());
             break;
         }
-        case ByteCodeType::Equal: {
-            std::printf(fmt, "equal");
-            std::printf(
-                "R%lld R%lld R%lld\n",
-                bc->SmallArgument1().Unwrap(), bc->SmallArgument2().Unwrap(), bc->SmallArgument3().Unwrap());
-            break;
-        }
-        case ByteCodeType::Add: {
-            std::printf(fmt, "add");
-            std::printf(
-                "R%lld R%lld R%lld\n",
-                bc->SmallArgument1().Unwrap(), bc->SmallArgument2().Unwrap(), bc->SmallArgument3().Unwrap());
-            break;
-        }
-        case ByteCodeType::Subtract: {
-            std::printf(fmt, "sub");
-            std::printf(
-                "R%lld R%lld R%lld\n",
-                bc->SmallArgument1().Unwrap(), bc->SmallArgument2().Unwrap(), bc->SmallArgument3().Unwrap());
-            break;
-        }
-        case ByteCodeType::Multiply: {
-            std::printf(fmt, "mult");
-            std::printf(
-                "R%lld R%lld R%lld\n",
-                bc->SmallArgument1().Unwrap(), bc->SmallArgument2().Unwrap(), bc->SmallArgument3().Unwrap());
-            break;
-        }
         case ByteCodeType::JumpIfFalse: {
             std::printf(fmt, "jumpf");
             std::printf(
@@ -488,29 +460,6 @@ void PrintByteCode(Runtime* rt, Function* fn, ByteCode* bc) {
             std::printf(
                 "R%lld R%lld\n",
                 bc->SmallArgument1().Unwrap(), bc->SmallArgument2().Unwrap());
-            break;
-        }
-        case ByteCodeType::Not: {
-            std::printf(fmt, "not");
-            std::printf(
-                "R%lld\n",
-                bc->SmallArgument1().Unwrap());
-            break;
-        }
-        case ByteCodeType::MapSet: {
-            std::printf(fmt, "mapset");
-            std::printf(
-                "R%lld R%lld R%lld\n",
-                bc->SmallArgument1().Unwrap(),
-                bc->SmallArgument2().Unwrap(),
-                bc->SmallArgument3().Unwrap());
-            break;
-        }
-        case ByteCodeType::NewMap: {
-            std::printf(fmt, "newmap");
-            std::printf(
-                "R%lld\n",
-                bc->SmallArgument1().Unwrap());
             break;
         }
         default: {

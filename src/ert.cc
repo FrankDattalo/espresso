@@ -297,54 +297,11 @@ void Runtime::Interpret() {
                 this->Return(arg1);
                 return;
             }
-            case ByteCodeType::NewMap: {
-                CurrentFrame()->AdvanceProgramCounter();
-                Integer arg1 = byteCode->SmallArgument1();
-                this->Local(arg1)->SetMap(NewMap());
-                break;
-            }
             case ByteCodeType::Copy: {
                 CurrentFrame()->AdvanceProgramCounter();
                 Integer arg1 = byteCode->SmallArgument1();
                 Integer arg2 = byteCode->SmallArgument2();
                 this->Copy(arg1, arg2);
-                break;
-            }
-            case ByteCodeType::MapSet: {
-                CurrentFrame()->AdvanceProgramCounter();
-                this->MapSet(byteCode->SmallArgument1(), byteCode->SmallArgument2(), byteCode->SmallArgument3());
-                break;
-            }
-            case ByteCodeType::Equal: {
-                CurrentFrame()->AdvanceProgramCounter();
-                Integer arg1 = byteCode->SmallArgument1();
-                Integer arg2 = byteCode->SmallArgument2();
-                Integer arg3 = byteCode->SmallArgument3();
-                this->Equal(arg1, arg2, arg3);
-                break;
-            }
-            case ByteCodeType::Subtract: {
-                CurrentFrame()->AdvanceProgramCounter();
-                Integer arg1 = byteCode->SmallArgument1();
-                Integer arg2 = byteCode->SmallArgument2();
-                Integer arg3 = byteCode->SmallArgument3();
-                this->Subtract(arg1, arg2, arg3);
-                break;
-            }
-            case ByteCodeType::Add: {
-                CurrentFrame()->AdvanceProgramCounter();
-                Integer arg1 = byteCode->SmallArgument1();
-                Integer arg2 = byteCode->SmallArgument2();
-                Integer arg3 = byteCode->SmallArgument3();
-                this->Add(arg1, arg2, arg3);
-                break;
-            }
-            case ByteCodeType::Multiply: {
-                CurrentFrame()->AdvanceProgramCounter();
-                Integer arg1 = byteCode->SmallArgument1();
-                Integer arg2 = byteCode->SmallArgument2();
-                Integer arg3 = byteCode->SmallArgument3();
-                this->Multiply(arg1, arg2, arg3);
                 break;
             }
             case ByteCodeType::JumpIfFalse: {
@@ -355,13 +312,6 @@ void Runtime::Interpret() {
                 if (!result) {
                     CurrentFrame()->SetProgramCounter(dest);
                 }
-                break;
-            }
-            case ByteCodeType::Not: {
-                CurrentFrame()->AdvanceProgramCounter();
-                Integer dest = byteCode->SmallArgument1();
-                Integer source = byteCode->SmallArgument2();
-                this->Not(dest, source);
                 break;
             }
             case ByteCodeType::Jump: {
@@ -991,7 +941,14 @@ void Function::Verify(Runtime* rt) const {
                 value->GetNativeFunction(rt)->Verify(rt);
                 break;
             }
+            case ValueType::Nil: { break; }
+            case ValueType::Integer: { break; }
+            case ValueType::Double: { break; }
+            case ValueType::String: { break; }
+            case ValueType::Boolean: { break; }
+            case ValueType::Map: { break; }
             default: {
+                Panic("Function::Verify");
                 break;
             }
         }
@@ -1042,24 +999,12 @@ void ByteCode::Verify(Runtime* rt, const Function* fn) const {
         }
     };
 
-    // auto validateConstantIsType = [&](Integer constantArg, ValueType expected, const char* message) {
-    //     ValueType actualType = fn->ConstantAt(constantArg)->GetType();
-    //     if (actualType != expected) {
-    //         rt->Local(Integer{0})->SetString(rt->NewString(message));
-    //         rt->Throw(Integer{0});
-    //     }
-    // };
-
     switch (this->Type()) {
         case ByteCodeType::NoOp: {
             break;
         }
         case ByteCodeType::Return: {
             validateRegisterIsReadable(this->SmallArgument1(), "Invalid readable register R%lld for Return instruction");
-            break;
-        }
-        case ByteCodeType::NewMap: {
-            validateRegisterIsWritable(this->SmallArgument1(), "Invalid writable register R%lld for NewMap instruction");
             break;
         }
         case ByteCodeType::LoadConstant: {
@@ -1085,44 +1030,9 @@ void ByteCode::Verify(Runtime* rt, const Function* fn) const {
             validateRegisterIsReadable(this->SmallArgument2(), "Invalid readable register R%lld for Copy");
             break;
         }
-        case ByteCodeType::Equal: {
-            validateRegisterIsWritable(this->SmallArgument1(), "Invalid writable register R%lld for Equal");
-            validateRegisterIsReadable(this->SmallArgument2(), "Invalid readable register 1 R%lld for Equal");
-            validateRegisterIsReadable(this->SmallArgument3(), "Invalid readable register 2 R%lld for Equal");
-            break;
-        }
-        case ByteCodeType::MapSet: {
-            validateRegisterIsReadable(this->SmallArgument1(), "Invalid readable register 1 R%lld for MapSet");
-            validateRegisterIsReadable(this->SmallArgument2(), "Invalid readable register 2 R%lld for MapSet");
-            validateRegisterIsReadable(this->SmallArgument3(), "Invalid readable register 3 R%lld for MapSet");
-            break;
-        }
-        case ByteCodeType::Add: {
-            validateRegisterIsWritable(this->SmallArgument1(), "Invalid writable register R%lld for Add");
-            validateRegisterIsReadable(this->SmallArgument2(), "Invalid readable register 1 R%lld for Add");
-            validateRegisterIsReadable(this->SmallArgument3(), "Invalid readable register 2 R%lld for Add");
-            break;
-        }
-        case ByteCodeType::Subtract: {
-            validateRegisterIsWritable(this->SmallArgument1(), "Invalid writable register R%lld for Subtract");
-            validateRegisterIsReadable(this->SmallArgument2(), "Invalid readable register 1 R%lld for Subtract");
-            validateRegisterIsReadable(this->SmallArgument3(), "Invalid readable register 2 R%lld for Subtract");
-            break;
-        }
-        case ByteCodeType::Multiply: {
-            validateRegisterIsWritable(this->SmallArgument1(), "Invalid writable register R%lld for Multiply");
-            validateRegisterIsReadable(this->SmallArgument2(), "Invalid readable register 1 R%lld for Multiply");
-            validateRegisterIsReadable(this->SmallArgument3(), "Invalid readable register 2 R%lld for Multiply");
-            break;
-        }
         case ByteCodeType::JumpIfFalse: {
             validateRegisterIsReadable(this->SmallArgument1(), "Invalid readable register R%lld for JumpIfFalse");
             validateProgramCounter(this->LargeArgument(), "Invalid program counter %lld for JumpIfFalse");
-            break;
-        }
-        case ByteCodeType::Not: {
-            validateRegisterIsWritable(this->SmallArgument1(), "Invalid writable register R%lld for Not");
-            validateRegisterIsReadable(this->SmallArgument2(), "Invalid readable register R%lld for Not");
             break;
         }
         case ByteCodeType::Jump: {

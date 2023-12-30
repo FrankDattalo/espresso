@@ -234,41 +234,22 @@ namespace bits {
     static constexpr uint32_t OP_INVOKE        = 0b00000010000000000000000000000000;
     static constexpr uint32_t OP_RETURN        = 0b00000011000000000000000000000000;
     static constexpr uint32_t OP_COPY          = 0b00000100000000000000000000000000;
-    static constexpr uint32_t OP_EQUAL         = 0b00000101000000000000000000000000;
-    static constexpr uint32_t OP_LT            = 0b00000110000000000000000000000000;
-    static constexpr uint32_t OP_LTE           = 0b00000111000000000000000000000000;
-    static constexpr uint32_t OP_GT            = 0b00001000000000000000000000000000;
-    static constexpr uint32_t OP_GTE           = 0b00001001000000000000000000000000;
-    static constexpr uint32_t OP_ADD           = 0b00001010000000000000000000000000;
-    static constexpr uint32_t OP_SUB           = 0b00001011000000000000000000000000;
-    static constexpr uint32_t OP_MULT          = 0b00001100000000000000000000000000;
-    static constexpr uint32_t OP_DIV           = 0b00001101000000000000000000000000;
     static constexpr uint32_t OP_NOOP          = 0b00001110000000000000000000000000;
     static constexpr uint32_t OP_JUMPF         = 0b00001111000000000000000000000000;
     static constexpr uint32_t OP_JUMP          = 0b00010000000000000000000000000000;
     static constexpr uint32_t OP_STORE_G       = 0b00010001000000000000000000000000;
-    static constexpr uint32_t OP_NOT           = 0b00010010000000000000000000000000;
-    static constexpr uint32_t OP_MAPSET        = 0b00010011000000000000000000000000;
-    static constexpr uint32_t OP_NEWMAP        = 0b00010100000000000000000000000000;
 }
 
 enum class ByteCodeType : std::uint32_t {
     NoOp = bits::OP_NOOP,
     Return = bits::OP_RETURN,
     LoadConstant = bits::OP_LOAD_CONSTANT,
-    LoadGlobal = bits::OP_LOAD_GLOBAL,
     Invoke = bits::OP_INVOKE,
     Copy = bits::OP_COPY,
-    Equal = bits::OP_EQUAL,
-    Add = bits::OP_ADD,
-    Subtract = bits::OP_SUB,
-    Multiply = bits::OP_MULT,
     JumpIfFalse = bits::OP_JUMPF,
     Jump = bits::OP_JUMP,
+    LoadGlobal = bits::OP_LOAD_GLOBAL,
     StoreGlobal = bits::OP_STORE_G,
-    Not = bits::OP_NOT,
-    MapSet = bits::OP_MAPSET,
-    NewMap = bits::OP_NEWMAP,
 };
 
 class NativeFunction;

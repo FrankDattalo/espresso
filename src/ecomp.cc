@@ -60,6 +60,7 @@ struct Compiler {
     }
 
     enum class TokenType {
+        Do,
         Def,
         Let,
         If,
@@ -79,6 +80,7 @@ struct Compiler {
 
     constexpr static const char* TokenTypeToString(TokenType type) {
         switch (type) {
+            case TokenType::Do: { return "Do"; }
             case TokenType::Def: { return "Def"; }
             case TokenType::Let: { return "Let"; }
             case TokenType::If: { return "If"; }
@@ -139,8 +141,8 @@ struct Compiler {
             registerCount = 1;
             Variable* self = this->locals.Push(runtime);
             self->isDefined = true;
-            constexpr const char* frameIdentifier = "@self";
-            constexpr const int frameIdentifierLength = 5;
+            constexpr const char* frameIdentifier = "self";
+            constexpr const int frameIdentifierLength = 4;
             static_assert(frameIdentifier[frameIdentifierLength] == '\0');
             self->token = Token{TokenType::Identifier, frameIdentifier, frameIdentifierLength};
         }
@@ -354,7 +356,7 @@ struct Compiler {
             }
         }
 
-        void PushScope(Runtime* runtime) {
+        void ScopePush(Runtime* runtime) {
             Scope* scope = this->scopes.Push(runtime);
             Scope* outer = this->scopes.At(Integer{this->scopes.Length().Unwrap() - 2});
 
@@ -366,7 +368,7 @@ struct Compiler {
             }
         }
 
-        void PopScope() {
+        void ScopePop() {
             this->scopes.Pop();
             // remove the locals from the locals array that were declared inner scope
             Scope* current = this->scopes.At(Integer{this->scopes.Length().Unwrap() - 1});
@@ -649,6 +651,7 @@ struct Compiler {
                 matcher->handle = handle;
             };
 
+            literalNeedingSeparator(TokenType::Do, "do");
             literalNeedingSeparator(TokenType::Def, "def");
             literalNeedingSeparator(TokenType::Let, "let");
             literalNeedingSeparator(TokenType::If, "if");
@@ -752,23 +755,27 @@ struct Compiler {
                 tokenizer.PutBack(&current);
                 switch (next.type) {
                     case TokenType::Def: {
-                        CompileDefExpression(runtime);
+                        CompileDef(runtime);
                         break;
                     }
                     case TokenType::If: {
-                        CompileIfExpression(runtime);
+                        CompileIf(runtime);
                         break;
                     }
                     case TokenType::Let: {
-                        CompileLetExpression(runtime);
+                        CompileLet(runtime);
+                        break;
+                    }
+                    case TokenType::Do: {
+                        CompileDo(runtime);
                         break;
                     }
                     case TokenType::Fn: {
-                        CompileFunctionExpression(runtime);
+                        CompileFunction(runtime);
                         break;
                     }
                     default: {
-                        CompileInvokeExpression(runtime);
+                        CompileInvoke(runtime);
                         break;
                     }
                 }
@@ -777,7 +784,7 @@ struct Compiler {
         }
     }
 
-    void CompileIfExpression(Runtime* runtime) {
+    void CompileIf(Runtime* runtime) {
         tokenizer.Expect(runtime, TokenType::LeftParen);
         tokenizer.Expect(runtime, TokenType::If);
         // condition
@@ -804,7 +811,10 @@ struct Compiler {
             // if false
             CompileExpression(runtime);
         } else {
-            CurrentContext()->NewNilConstant(runtime);
+            // one armed if returns nil for else
+            Integer constantNumber = CurrentContext()->NewNilConstant(runtime);
+            Integer registerDest = CurrentContext()->StackPush(runtime);
+            CurrentContext()->EmitLong(runtime, ByteCodeType::LoadConstant, registerDest, constantNumber);
         }
 
         tokenizer.Expect(runtime, TokenType::RightParen);
@@ -814,7 +824,7 @@ struct Compiler {
         CurrentContext()->UpdateLong(runtime, jumpAfterIfTrue, ByteCodeType::Jump, Integer{0}, endOfIfFalse);
     }
 
-    void CompileDefExpression(Runtime* runtime) {
+    void CompileDef(Runtime* runtime) {
         tokenizer.Expect(runtime, TokenType::LeftParen);
         tokenizer.Expect(runtime, TokenType::Def);
         Token identifier = tokenizer.Expect(runtime, TokenType::Identifier);
@@ -837,14 +847,14 @@ struct Compiler {
         CurrentContext()->EmitLong(runtime, ByteCodeType::LoadConstant, registerDest, constantNumber);
     }
 
-    void CompileLetExpression(Runtime* runtime) {
+    void CompileLet(Runtime* runtime) {
         tokenizer.Expect(runtime, TokenType::LeftParen);
         tokenizer.Expect(runtime, TokenType::Let);
 
         // begin of vars
         tokenizer.Expect(runtime, TokenType::LeftParen);
 
-        CurrentContext()->PushScope(runtime);
+        CurrentContext()->ScopePush(runtime);
 
         while (true) {
             Token next = tokenizer.Next();
@@ -872,12 +882,35 @@ struct Compiler {
 
         // ensure the location from the inner scope is in the right place in the outer scope
         Integer source = CurrentContext()->StackTop();
-        CurrentContext()->PopScope();
+        CurrentContext()->ScopePop();
         Integer dest = CurrentContext()->StackPush(runtime);
         CurrentContext()->Emit(runtime, ByteCodeType::Copy, dest, source);
     }
 
-    void CompileFunctionExpression(Runtime* runtime) {
+    void CompileDo(Runtime* runtime) {
+        tokenizer.Expect(runtime, TokenType::LeftParen);
+        tokenizer.Expect(runtime, TokenType::Do);
+
+        while (true) {
+            Token curr = tokenizer.Next();
+            tokenizer.PutBack(&curr);
+            if (curr.type == TokenType::EndOfFile || curr.type == TokenType::RightParen) {
+                break;
+            }
+
+            CompileExpression(runtime);
+
+            curr = tokenizer.Next();
+            tokenizer.PutBack(&curr);
+            if (curr.type != TokenType::RightParen) {
+                CurrentContext()->StackPop();
+            }
+        }
+
+        tokenizer.Expect(runtime, TokenType::RightParen);
+    }
+
+    void CompileFunction(Runtime* runtime) {
         Integer destStackAddress = CurrentContext()->StackPush(runtime);
         Integer functionConstantId = CurrentContext()->NewFunctionConstant(runtime);
         Function* functionDest = CurrentContext()->ConstantAt(functionConstantId)->GetFunction(runtime);
@@ -958,7 +991,7 @@ struct Compiler {
         }
     }
 
-    void CompileInvokeExpression(Runtime* runtime) {
+    void CompileInvoke(Runtime* runtime) {
 
         tokenizer.Expect(runtime, TokenType::LeftParen);
 

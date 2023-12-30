@@ -610,6 +610,8 @@ public:
 
     String* GetLoadPath() const;
 
+    Map* GetGlobals() const;
+
 private:
     System* system{nullptr};
     Vector<CallFrame> frames;

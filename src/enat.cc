@@ -230,53 +230,66 @@ static constexpr Entry ENTRIES[] = {
         Integer absoluteIndex = rt->CurrentFrame()->AbsoluteIndex(Integer{1});
         throw ThrowException{absoluteIndex};
     }},
-    {"lessThanOrEqual", 3, 3, [](Runtime* rt) {
+    {"=", 3, 3, [](Runtime* rt) {
+        Value* v1 = rt->Local(Integer{1});
+        Value* v2 = rt->Local(Integer{2});
+        bool result = v1->Equals(rt, v2);
+        rt->Local(Integer{0})->SetBoolean(result);
+    }},
+    {"<=", 3, 3, [](Runtime* rt) {
         std::int64_t v1 = rt->Local(Integer{1})->GetInteger(rt).Unwrap();
         std::int64_t v2 = rt->Local(Integer{2})->GetInteger(rt).Unwrap();
         bool result = v1 <= v2;
         rt->Local(Integer{0})->SetBoolean(result);
     }},
-    {"greaterThanOrEqual", 3, 3, [](Runtime* rt) {
+    {">=", 3, 3, [](Runtime* rt) {
         std::int64_t v1 = rt->Local(Integer{1})->GetInteger(rt).Unwrap();
         std::int64_t v2 = rt->Local(Integer{2})->GetInteger(rt).Unwrap();
         bool result = v1 >= v2;
         rt->Local(Integer{0})->SetBoolean(result);
     }},
-    {"lessThan", 3, 3, [](Runtime* rt) {
+    {"<", 3, 3, [](Runtime* rt) {
         std::int64_t v1 = rt->Local(Integer{1})->GetInteger(rt).Unwrap();
         std::int64_t v2 = rt->Local(Integer{2})->GetInteger(rt).Unwrap();
         bool result = v1 < v2;
         rt->Local(Integer{0})->SetBoolean(result);
     }},
-    {"greaterThan", 3, 3, [](Runtime* rt) {
+    {">", 3, 3, [](Runtime* rt) {
         std::int64_t v1 = rt->Local(Integer{1})->GetInteger(rt).Unwrap();
         std::int64_t v2 = rt->Local(Integer{2})->GetInteger(rt).Unwrap();
         bool result = v1 > v2;
         rt->Local(Integer{0})->SetBoolean(result);
     }},
-    {"subtract", 3, 3, [](Runtime* rt) {
-        std::int64_t v1 = rt->Local(Integer{1})->GetInteger(rt).Unwrap();
-        std::int64_t v2 = rt->Local(Integer{2})->GetInteger(rt).Unwrap();
-        std::int64_t result = v1 - v2;
-        rt->Local(Integer{0})->SetInteger(Integer{result});
-    }},
-    {"multiply", 3, 3, [](Runtime* rt) {
-        std::int64_t v1 = rt->Local(Integer{1})->GetInteger(rt).Unwrap();
-        std::int64_t v2 = rt->Local(Integer{2})->GetInteger(rt).Unwrap();
-        std::int64_t result = v1 * v2;
-        rt->Local(Integer{0})->SetInteger(Integer{result});
-    }},
-    {"add", 3, 3, [](Runtime* rt) {
+    {"+", 3, 3, [](Runtime* rt) {
         std::int64_t v1 = rt->Local(Integer{1})->GetInteger(rt).Unwrap();
         std::int64_t v2 = rt->Local(Integer{2})->GetInteger(rt).Unwrap();
         std::int64_t result = v1 + v2;
         rt->Local(Integer{0})->SetInteger(Integer{result});
     }},
-    {"subtract", 3, 3, [](Runtime* rt) {
+    {"-", 3, 3, [](Runtime* rt) {
         std::int64_t v1 = rt->Local(Integer{1})->GetInteger(rt).Unwrap();
         std::int64_t v2 = rt->Local(Integer{2})->GetInteger(rt).Unwrap();
         std::int64_t result = v1 - v2;
         rt->Local(Integer{0})->SetInteger(Integer{result});
+    }},
+    {"*", 3, 3, [](Runtime* rt) {
+        std::int64_t v1 = rt->Local(Integer{1})->GetInteger(rt).Unwrap();
+        std::int64_t v2 = rt->Local(Integer{2})->GetInteger(rt).Unwrap();
+        std::int64_t result = v1 * v2;
+        rt->Local(Integer{0})->SetInteger(Integer{result});
+    }},
+    {"/", 3, 3, [](Runtime* rt) {
+        std::int64_t v1 = rt->Local(Integer{1})->GetInteger(rt).Unwrap();
+        std::int64_t v2 = rt->Local(Integer{2})->GetInteger(rt).Unwrap();
+        if (v2 == 0) {
+            rt->Local(Integer{0})->SetString(rt->NewString("Division by zero"));
+            rt->Throw(Integer{0});
+        }
+        std::int64_t result = v1 / v2;
+        rt->Local(Integer{0})->SetInteger(Integer{result});
+    }},
+    {"globals", 1, 1, [](Runtime* rt) {
+        rt->Local(Integer{0})->SetMap(rt->GetGlobals());
     }},
 };
 
@@ -384,7 +397,7 @@ static void DoPrint(Runtime* rt, Value* val, Printed* printed, bool display) {
                     system->Write(out, ", ", 2);
                 }
                 DoPrint(rt, iter.Key(), printed, true);
-                system->Write(out, " = ", 3);
+                system->Write(out, " ", 1);
                 DoPrint(rt, iter.Value(), printed, true);
                 first = false;
             }

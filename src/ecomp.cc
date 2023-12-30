@@ -512,7 +512,7 @@ struct Compiler {
 
             using CharFn = int(*)(int);
 
-            Matcher::Handle literalNeedingSeparatorMatcher = [](Matcher* matcher, const char* source, std::int64_t length) -> std::int64_t {
+            constexpr Matcher::Handle literalNeedingSeparatorMatcher = [](Matcher* matcher, const char* source, std::int64_t length) -> std::int64_t {
                 std::int64_t matchLength = literalMatcher(matcher, source, length);
                 if (matchLength == 0) {
                     return 0;
@@ -528,18 +528,26 @@ struct Compiler {
                 return matchLength;
             };
 
-            Matcher::Handle unknownMatcher = [](Matcher* matcher, const char* source, std::int64_t length) -> std::int64_t {
+            constexpr Matcher::Handle unknownMatcher = [](Matcher* matcher, const char* source, std::int64_t length) -> std::int64_t {
                 (void)(matcher);
                 (void)(source);
                 (void)(length);
                 return 1;
             };
 
-            Matcher::Handle identifierMatcher = [](Matcher* matcher, const char* source, std::int64_t length) -> std::int64_t {
+            constexpr CharFn leadingIdentifierChar = [](int c) -> int {
+                return std::isalpha(c) || c == '>' || c == '<' || c == '=' || c == '+' || c == '-' || c == '*' || c == '/';
+            };
+
+            constexpr CharFn trailingIdentifierChar = [](int c) -> int {
+                return leadingIdentifierChar(c) || std::isdigit(c);
+            };
+
+            constexpr Matcher::Handle identifierMatcher = [](Matcher* matcher, const char* source, std::int64_t length) -> std::int64_t {
                 (void)(matcher);
                 std::int64_t i = 0;
                 for (; i < length; i++) {
-                    CharFn checker = (i == 0) ? std::isalpha : std::isalnum;
+                    CharFn checker = i == 0 ? leadingIdentifierChar : trailingIdentifierChar;
                     char c = source[i];
                     if (!checker(c)) {
                         break;
@@ -548,7 +556,7 @@ struct Compiler {
                 return i;
             };
 
-            Matcher::Handle doubleMatcher = [](Matcher* matcher, const char* source, std::int64_t length) -> std::int64_t {
+            constexpr Matcher::Handle doubleMatcher = [](Matcher* matcher, const char* source, std::int64_t length) -> std::int64_t {
                 (void)(matcher);
                 std::int64_t i = 0;
                 bool foundPeriod = false;
@@ -568,7 +576,7 @@ struct Compiler {
                 return i;
             };
 
-            Matcher::Handle integerMatcher = [](Matcher* matcher, const char* source, std::int64_t length) -> std::int64_t {
+            constexpr Matcher::Handle integerMatcher = [](Matcher* matcher, const char* source, std::int64_t length) -> std::int64_t {
                 (void)(matcher);
                 std::int64_t i = 0;
                 for (; i < length; i++) {
@@ -580,7 +588,7 @@ struct Compiler {
                 return i;
             };
 
-            Matcher::Handle stringMatcher = [](Matcher* matcher, const char* source, std::int64_t length) -> std::int64_t {
+            constexpr Matcher::Handle stringMatcher = [](Matcher* matcher, const char* source, std::int64_t length) -> std::int64_t {
                 (void)(matcher);
                 std::int64_t i = 0;
                 bool foundClosing = false;
@@ -604,30 +612,24 @@ struct Compiler {
                 return i;
             };
 
-            Matcher::Handle commentMatcher = [](Matcher* matcher, const char* source, std::int64_t length) -> std::int64_t {
+            constexpr Matcher::Handle commentMatcher = [](Matcher* matcher, const char* source, std::int64_t length) -> std::int64_t {
                 (void)(matcher);
                 std::int64_t i = 0;
                 for (; i < length; i++) {
                     char c = source[i];
+                    // leading
                     if (i == 0) {
-                        if (c != '/') {
+                        if (c != ';') {
                             return 0;
                         }
-                    } else if (i == 1) {
-                        if (c != '*') {
-                            return 0;
-                        }
-                    } else if (c == '*') {
-                        if (i + 1 > length) {
-                            return 0;
-                        }
-                        char next = source[i + 1];
-                        if (next == '/') {
-                            return i + 2;
+                    // trailing
+                    } else {
+                        if (c == '\r' || c == '\n') {
+                            break;
                         }
                     }
                 }
-                return 0;
+                return i;
             };
 
             auto literal = [&](TokenType type, const char* value) {

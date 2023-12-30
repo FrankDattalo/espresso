@@ -71,6 +71,10 @@ String* Runtime::GetLoadPath() const {
     return this->loadPath;
 }
 
+Map* Runtime::GetGlobals() const {
+    return this->globals;
+}
+
 System* Runtime::GetSystem() {
     return this->system;
 }

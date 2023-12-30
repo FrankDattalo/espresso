@@ -1232,7 +1232,6 @@ void Runtime::Sweep() {
             continue;
         }
 
-
         Object* next = obj->GetNext();
 
         // 1. start of heap

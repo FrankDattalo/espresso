@@ -629,22 +629,21 @@ private:
     bool gcEnabled{false};
 };
 
-class RuntimeDefer {
+class Defer {
 public:
-    using Handle = void (*)(Runtime*);
+    using Handle = std::function<void()>;
 
-    RuntimeDefer(Runtime* rt, Handle fn);
+    Defer(Handle fn);
 
-    ~RuntimeDefer();
+    ~Defer();
 
-    RuntimeDefer(const RuntimeDefer&) = delete;
-    RuntimeDefer& operator=(const RuntimeDefer&) = delete;
+    Defer(const Defer&) = delete;
+    Defer& operator=(const Defer&) = delete;
 
-    RuntimeDefer(RuntimeDefer&) = delete;
-    RuntimeDefer& operator=(RuntimeDefer&&) = delete;
+    Defer(Defer&) = delete;
+    Defer& operator=(Defer&&) = delete;
 
 private:
-    Runtime* runtime;
     Handle handle;
 };
 

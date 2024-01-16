@@ -8,3 +8,4 @@
 #include <cmath>
 #include <cerrno>
 #include <stdexcept>
+#include <functional>

@@ -1088,9 +1088,11 @@ void Compile(Runtime* rt) {
 
     Compiler compiler{rt, source, dest};
 
-    compiler.Compile(rt);
+    Defer deInit{[&](){
+        compiler.DeInit(rt);
+    }};
 
-    compiler.DeInit(rt);
+    compiler.Compile(rt);
 }
 
 } // namespace compiler

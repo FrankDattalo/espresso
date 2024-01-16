@@ -117,9 +117,9 @@ void Runtime::RawInvoke(Integer localBase, Integer argumentCount, bool isTailInv
     Integer absoluteBase = CurrentFrame()->AbsoluteIndex(localBase);
     frames.Push(this)->Init(absoluteBase, localCount);
 
-    RuntimeDefer popFrameAtEnd(this, [](Runtime* rt) {
-        rt->frames.Pop();
-    });
+    Defer popFrameAtEnd{[=](){
+        this->frames.Pop();
+    }};
 
     // prepare the new stack
     // 1. grow the stack until it's at least as large as the new top
@@ -184,13 +184,12 @@ void Runtime::RawFree(void* pointer, Integer itemSize, Integer count) {
     // std::printf("Free %s [%p, %p)\n", typeid(T).name(), (void*) pointer, (void*) &pointer[count.Unwrap()]);
 }
 
-RuntimeDefer::RuntimeDefer(Runtime* rt, RuntimeDefer::Handle fn)
-: runtime{rt}
-, handle{fn}
+Defer::Defer(Defer::Handle fn)
+: handle{fn}
 {}
 
-RuntimeDefer::~RuntimeDefer() {
-    this->handle(this->runtime);
+Defer::~Defer() {
+    this->handle();
 }
 
 Integer ThrowException::GetAbsoluteStackIndex() const {
